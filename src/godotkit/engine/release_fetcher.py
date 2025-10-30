@@ -4,9 +4,10 @@ from datetime import datetime
 from typing import List, Optional
 
 import httpx
-from packaging.version import InvalidVersion, Version
 
 from godotkit.common import USER_AGENT
+
+from .version_parsing import CSHARP_URL_VARIANTS, GodotVersion
 
 logger = logging.getLogger("GodotKit.Engine.ReleaseFetcher")
 
@@ -43,14 +44,14 @@ ARCH_KEYWORDS = {
 class GodotAsset:
     """Represents a single downloadable release asset."""
 
-    def __init__(self, name: str, url: str, size: int, mono: bool = False):
+    def __init__(self, name: str, url: str, size: int, csharp_enabled: bool = False):
         self.name = name
         self.url = url
         self.size = size
-        self.mono = mono
+        self.csharp_enabled = csharp_enabled
 
     def __repr__(self):
-        return f"<GodotAsset {self.name!r}, {self.size} bytes, mono={self.mono}>"
+        return f"<GodotAsset {self.name!r}, {self.size} bytes, csharp={self.csharp_enabled}>"
 
 
 class GodotRelease:
@@ -67,7 +68,7 @@ class GodotRelease:
         self.assets = assets
 
     def get_asset(
-        self, platform: str, arch: Optional[str] = None, mono: bool = False
+        self, platform: str, arch: Optional[str] = None, csharp: bool = False
     ) -> Optional[GodotAsset]:
         """
         Retrieves a matching asset based on platform, architecture, and mono status.
@@ -85,19 +86,19 @@ class GodotRelease:
             return None
 
         logging.debug(
-            f"Searching for asset for version {self.version} on {platform}/{arch} (mono={mono}) with keywords: {keywords}"
+            f"Searching for asset for version {self.version} on {platform}/{arch} (csharp={csharp}) with keywords: {keywords}"
         )
 
         for asset in self.assets:
             name = asset.name.lower()
-            if mono != asset.mono:
+            if csharp != asset.csharp_enabled:
                 continue
             if any(k in name for k in keywords):
                 logging.debug(f"Found matching asset: {asset.name}")
                 return asset
 
         logging.debug(
-            f"No matching asset found for {self.version} on {platform}/{arch} (mono={mono})"
+            f"No matching asset found for {self.version} on {platform}/{arch} (csharp={csharp})"
         )
         return None
 
@@ -151,16 +152,21 @@ class GodotFetcher:
         self._stable_only_cached: Optional[bool] = None
 
     @staticmethod
-    def version_sort_key(tag: str) -> Version:
-        """Converts a release tag like '4.5.1-stable' into a Version object for sorting."""
-        base_version = tag.split("-")[0]
+    def version_sort_key(tag: str, csharp: bool = False) -> GodotVersion:
+        """Converts a release tag like '4.5.1-stable' into a GodotVersion object for sorting."""
         try:
-            return Version(base_version)
-        except InvalidVersion:
+            tag = tag.replace("-stable", "")
+            if csharp:
+                if tag.startswith("4."):
+                    tag += " (.NET)"
+                else:
+                    tag += " (Mono)"
+            return GodotVersion.parse(tag)
+        except ValueError:
             logging.warning(
                 f"Malformed version tag '{tag}' encountered. Sorting to bottom."
             )
-            return Version("0.0.0")
+            return GodotVersion(0, 0, 0, channel="dev")
 
     def fetch_releases(
         self,
@@ -221,22 +227,29 @@ class GodotFetcher:
 
                 published_at = datetime.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ")
 
-                assets = [
-                    GodotAsset(
-                        name=a["name"],
-                        url=a["browser_download_url"],
-                        size=a["size"],
-                        mono="mono" in a["name"].lower(),
+                assets = []
+                for a in release.get("assets", []):
+                    asset_name_lower = a["name"].lower()
+                    csharp_enabled = any(
+                        v in asset_name_lower for v in CSHARP_URL_VARIANTS
                     )
-                    for a in release.get("assets", [])
-                ]
+                    assets.append(
+                        GodotAsset(
+                            name=a["name"],
+                            url=a["browser_download_url"],
+                            size=a["size"],
+                            csharp_enabled=csharp_enabled,
+                        )
+                    )
 
                 godot_release = GodotRelease(
                     version=tag, published_at=published_at, assets=assets
                 )
 
                 if user_platform:
-                    asset_found = godot_release.get_asset(user_platform, user_arch)
+                    asset_found = godot_release.get_asset(
+                        user_platform, user_arch, csharp=False
+                    ) or godot_release.get_asset(user_platform, user_arch, csharp=True)
                     if not asset_found:
                         logging.debug(
                             f"Skipping {tag}: No asset found for {user_platform}/{user_arch}"
