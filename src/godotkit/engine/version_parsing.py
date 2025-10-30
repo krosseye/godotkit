@@ -108,15 +108,15 @@ class GodotVersion:
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, GodotVersion):
             return NotImplemented
-        return self._comparison_key() < other._comparison_key()
+        return self._ordering_key() < other._ordering_key()
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, GodotVersion):
             return False
-        return self._comparison_key() == other._comparison_key()
+        return self._equality_key() == other._equality_key()
 
     def __hash__(self):
-        return hash(self._comparison_key())
+        return hash(self._equality_key())
 
     @classmethod
     def parse(cls, version_string: str) -> "GodotVersion":
@@ -196,8 +196,8 @@ class GodotVersion:
 
         return cls(major, minor, patch, channel, channel_num, csharp_enabled)
 
-    def _comparison_key(self) -> Tuple[int, int, int, int, int, bool]:
-        "Returns a tuple suitable for sorting and equality checks."
+    def _ordering_key(self) -> Tuple[int, int, int, int, int]:
+        """Returns a tuple suitable for ordering (ignores variant)."""
         channel_rank = RELEASE_CHANNEL_RANKING.get(self.channel, -1)
         return (
             self.major,
@@ -205,7 +205,18 @@ class GodotVersion:
             self.patch,
             channel_rank,
             self.channel_num,
-            self.csharp_enabled,
+        )
+
+    def _equality_key(self) -> Tuple[int, int, int, int, int, str]:
+        """Returns a tuple suitable for strict equality checks (includes variant)."""
+        channel_rank = RELEASE_CHANNEL_RANKING.get(self.channel, -1)
+        return (
+            self.major,
+            self.minor,
+            self.patch,
+            channel_rank,
+            self.channel_num,
+            self.variant,
         )
 
     @property
@@ -240,40 +251,3 @@ class GodotVersion:
     def is_dotnet(self) -> bool:
         """Checks if the version is a .NET build (Godot 4+ with C#)."""
         return self.csharp_enabled and self.major >= 4
-
-
-if __name__ == "__main__":
-    urls = [
-        "https://github.com/godotengine/godot-builds/releases/download/3.6.2-stable/Godot_v3.6.2-stable_mono_win64.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.6-dev2/Godot_v4.6-dev2_mono_win64.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.5.1-stable/Godot_v4.5.1-stable_mono_win64.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.5.1-rc2/Godot_v4.5.1-rc2_mono_win64.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.5.1-rc1/Godot_v4.5.1-rc1_mono_win64.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.6-dev1/Godot_v4.6-dev1_mono_win64.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.5-rc1/Godot_v4.5-rc1_win64.exe.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.5-rc2/Godot_v4.5-rc2_win64.exe.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.5-stable/Godot_v4.5-stable_win64.exe.zip",
-        "https://github.com/godotengine/godot-builds/releases/download/4.6-dev1/Godot_v4.6-dev1_win64.exe.zip",
-    ]
-
-    versions = [GodotVersion.from_url(url) for url in urls]
-
-    print("--- Parsed Versions ---")
-    for v in versions:
-        print(repr(v))
-        print(f"  String: {str(v)}")
-        print(f"  Sort Key: {v._comparison_key()}")
-
-    print("\n--- Sorting Test ---")
-    sorted_versions = sorted(versions)
-    for v in sorted_versions:
-        print(str(v), " | Variant:", v.variant)
-
-    print("\n--- Comparison Test ---")
-    v_rc2_mono = GodotVersion.parse("4.5.1-rc2 (Mono)")
-    v_rc1_std = GodotVersion.parse("4.5.1-rc1")
-    v_stable = GodotVersion.parse("4.5.1")
-
-    print(f"{v_rc2_mono} > {v_rc1_std} ? {v_rc2_mono > v_rc1_std}")  # True: rc2 > rc1
-    print(f"{v_stable} > {v_rc2_mono} ? {v_stable > v_rc2_mono}")  # True: stable > rc2
-    print(f"{v_rc2_mono} == {v_rc2_mono} ? {v_rc2_mono == v_rc2_mono}")  # True
