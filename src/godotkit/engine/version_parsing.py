@@ -241,11 +241,6 @@ class GodotVersion:
         """Checks if the version is a .NET build (Godot 4+ with C#)."""
         return self.csharp_enabled and self.major >= 4
 
-    @property
-    def is_csharp(self) -> bool:
-        """Checks if the version is any C# supported build (Mono or .NET)."""
-        return self.csharp_enabled
-
 
 if __name__ == "__main__":
     urls = [
