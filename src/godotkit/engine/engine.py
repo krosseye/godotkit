@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from godotkit.engine import GodotVersion
-from godotkit.engine.utils import find_binary, open_directory, remove, start
 from godotkit.project.utils import start as start_project
+
+from .utils import find_binary, open_directory, remove, start
+from .version_parsing import GodotVersion
 
 
 class GodotEngine:
