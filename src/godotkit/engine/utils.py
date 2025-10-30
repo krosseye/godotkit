@@ -9,6 +9,7 @@ from typing import Callable, Optional
 import httpx
 
 from godotkit import common
+from godotkit.constants import USER_AGENT
 
 from .exceptions import DownloadError, ExtractError
 
@@ -128,7 +129,7 @@ def download_and_extract(
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
 
-    headers = {"User-Agent": common.USER_AGENT}
+    headers = {"User-Agent": USER_AGENT}
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)

@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import httpx
 
-from godotkit.common import USER_AGENT
+from godotkit.constants import RELEASE_FETCHER_TIMEOUT, USER_AGENT
 
 from .version_parsing import CSHARP_URL_VARIANTS, GodotVersion
 
@@ -146,7 +146,7 @@ class GodotFetcher:
     STABLE_URL = "https://api.github.com/repos/godotengine/godot/releases"
     ALL_URL = "https://api.github.com/repos/godotengine/godot-builds/releases"
 
-    def __init__(self, timeout: float = 10.0):
+    def __init__(self, timeout: float = RELEASE_FETCHER_TIMEOUT):
         self.client = httpx.Client(timeout=timeout, headers={"User-Agent": USER_AGENT})
         self.cache: List[GodotRelease] = []
         self._stable_only_cached: Optional[bool] = None
