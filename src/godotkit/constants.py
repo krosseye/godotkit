@@ -6,3 +6,4 @@ USER_AGENT = f"{__name__} v{__version__} (Python: v{platform.python_version()}, 
 
 GIT_CLONE_TIMEOUT = 300
 RELEASE_FETCHER_TIMEOUT = 10
+RELEASE_DOWNLOAD_TIMEOUT = 30

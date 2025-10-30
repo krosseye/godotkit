@@ -9,7 +9,7 @@ from typing import Callable, Optional
 import httpx
 
 from godotkit import common
-from godotkit.constants import USER_AGENT
+from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
 
 from .exceptions import DownloadError, ExtractError
 
@@ -107,7 +107,7 @@ def remove(engine_dir: Path) -> None:
 def download_and_extract(
     url: str,
     save_path: Path,
-    timeout: float = 30.0,
+    timeout: float = RELEASE_DOWNLOAD_TIMEOUT,
     overwrite: bool = False,
     progress_callback: Optional[Callable[[int, Optional[int]], None]] = None,
 ) -> None:
