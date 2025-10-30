@@ -15,4 +15,36 @@ requires = ["uv_build>=0.8.15,<0.9.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["mypy>=1.10,<2.0.0", "ruff>=0.4,<1.0.0"]
+dev = [
+    "mypy>=1.10,<2.0.0",
+    "python-semantic-release>=10.0.0,<11.0.0",
+    "ruff>=0.4,<1.0.0",
+]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+commit_parser = "conventional"
+tag_format = "v{version}"
+
+[tool.semantic_release.branches.main]
+match = "(main|master)"
+
+[tool.semantic_release.changelog]
+mode = "update"
+insertion_flag = "<!-- version list -->"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+output_format = "md"
+mask_initial_release = true
+
+[tool.semantic_release.commit_parser_options]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+[tool.semantic_release.remote]
+type = "github"
+
+[tool.semantic_release.publish]
+dist_glob_patterns = ["dist/*"]
+upload_to_vcs_release = true
