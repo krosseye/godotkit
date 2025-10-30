@@ -36,13 +36,13 @@ jobs:
       - name: Install project dependencies
         run: uv sync --all-extras
 
-      - name: Build distribution
-        run: uv build
-
-      - name: Create release
+      - name: Create release version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run semantic-release version --push --vcs-release --changelog
+
+      - name: Build distribution
+        run: uv build
 
       - name: Publish distribution
         env:
