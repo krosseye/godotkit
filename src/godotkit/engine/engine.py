@@ -11,9 +11,9 @@ class GodotEngine:
         self.version = version
         self.directory_path = engine_dir
 
-        bin_dir = find_binary(engine_dir)
-        if bin_dir:
-            self.binary_path = bin_dir
+        bin_file = find_binary(engine_dir)
+        if bin_file:
+            self.binary_path = bin_file
         else:
             raise ValueError("Cannot find Godot binary")
 
