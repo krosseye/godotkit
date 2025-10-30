@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.1 (2025-10-30)
+
+### Bug Fixes
+
+- Wheel was being built before bumping version
+  ([`d27c24a`](https://github.com/krosseye/godotkit/commit/d27c24a3c351ac763a58070c79ea8a8c3d12a7f2))
+
+
 ## v1.1.0 (2025-10-30)
 
 ### Bug Fixes
