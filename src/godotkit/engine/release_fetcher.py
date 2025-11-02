@@ -179,11 +179,13 @@ class GodotFetcher:
         """
         Fetches Godot releases from GitHub.
 
-        :param stable_only: If True, fetches only the main stable branch releases.
-        :param max_releases: Maximum number of releases to fetch.
-        :param platform_only: If True, filters releases to only include those with assets for the current system.
-        :param refresh_cache: If True, clears the cache before fetching.
-        :return: A list of GodotRelease objects.
+        Args:
+            stable_only: If True, fetches only the main stable branch releases.
+            max_releases: Maximum number of releases to fetch.
+            platform_only: If True, filters releases to only include those with assets for the current system.
+            refresh_cache: If True, clears the cache before fetching.
+        Returns:
+            A list of GodotRelease objects.
         """
         if self.cache and not refresh_cache and self._stable_only_cached == stable_only:
             logging.info("Returning cached releases.")

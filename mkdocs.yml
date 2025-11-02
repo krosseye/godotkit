@@ -1,0 +1,79 @@
+site_name: GodotKit
+site_author: krosseye
+site_url: https://krosseye.github.io/godotkit/
+repo_url: https://github.com/krosseye/godotkit
+repo_name: GitHub
+edit_uri: edit/main/docs/
+site_description: Python functions and classes for working with Godot engine releases and projects.
+
+nav:
+  - Introduction:
+      - About: index.md
+      - Getting Started: getting_started.md
+  - API Reference:
+      - api_reference/common.md
+      - Engine:
+          - api_reference/engine/engine.md
+          - api_reference/engine/exceptions.md
+          - api_reference/engine/release_fetcher.md
+          - api_reference/engine/utils.md
+          - api_reference/engine/version_parsing.md
+      - Project:
+          - api_reference/project/utils.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      linenums: true
+  - pymdownx.superfences
+
+plugins:
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_signature_annotations: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_section_style: table
+            separate_signature: false
+            members_order: alphabetical
+            inherited_members: true
+            show_if_no_docstring: false
+            backlinks: False
+            show_root_full_path: false
+            show_source: false
+            filters:
+              - "!^_"
+              - "^__init__$"
+
+  - search:
+      lang: en
+      separator: '[\s\-]+'
+
+theme:
+  features:
+    - navigation.expand
+    - navigation.tabs
+    - search.suggest
+    - search.highlight
+
+  name: material
+  favicon: images/icon.png
+
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: blue-grey
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: blue-grey
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
