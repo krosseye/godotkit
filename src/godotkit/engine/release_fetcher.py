@@ -9,7 +9,7 @@ from godotkit.constants import RELEASE_FETCHER_TIMEOUT, USER_AGENT
 
 from .version_parsing import CSHARP_URL_VARIANTS, GodotVersion
 
-logger = logging.getLogger("GodotKit.Engine.ReleaseFetcher")
+logger = logging.getLogger(__name__)
 
 
 PLATFORMS = ["windows", "linux", "macos"]
@@ -75,17 +75,17 @@ class GodotRelease:
         'arch' must be explicitly provided.
         """
         if not arch:
-            logging.debug("Cannot find asset: architecture not provided.")
+            logger.debug("Cannot find asset: architecture not provided.")
             return None
 
         keywords = ARCH_KEYWORDS.get(platform, {}).get(arch, [])
         if not keywords:
-            logging.warning(
+            logger.warning(
                 f"Platform/Architecture combination not supported: {platform}/{arch}"
             )
             return None
 
-        logging.debug(
+        logger.debug(
             f"Searching for asset for version {self.version} on {platform}/{arch} (csharp={csharp}) with keywords: {keywords}"
         )
 
@@ -94,10 +94,10 @@ class GodotRelease:
             if csharp != asset.csharp_enabled:
                 continue
             if any(k in name for k in keywords):
-                logging.debug(f"Found matching asset: {asset.name}")
+                logger.debug(f"Found matching asset: {asset.name}")
                 return asset
 
-        logging.debug(
+        logger.debug(
             f"No matching asset found for {self.version} on {platform}/{arch} (csharp={csharp})"
         )
         return None
@@ -163,7 +163,7 @@ class GodotFetcher:
                     tag += " (Mono)"
             return GodotVersion.parse(tag)
         except ValueError:
-            logging.warning(
+            logger.warning(
                 f"Malformed version tag '{tag}' encountered. Sorting to bottom."
             )
             return GodotVersion(0, 0, 0, channel="dev")
@@ -188,11 +188,11 @@ class GodotFetcher:
             A list of GodotRelease objects.
         """
         if self.cache and not refresh_cache and self._stable_only_cached == stable_only:
-            logging.info("Returning cached releases.")
+            logger.info("Returning cached releases.")
             return self.cache
 
         source = "stable" if stable_only else "all"
-        logging.info(f"Fetching {source} releases from GitHub.")
+        logger.info(f"Fetching {source} releases from GitHub.")
 
         url = self.STABLE_URL if stable_only else self.ALL_URL
         releases: List[GodotRelease] = []
@@ -203,26 +203,26 @@ class GodotFetcher:
         user_arch = detect_architecture() if platform_only and user_platform else None
 
         if platform_only:
-            logging.info(f"Filtering for platform: {user_platform}/{user_arch}")
+            logger.info(f"Filtering for platform: {user_platform}/{user_arch}")
 
         while True:
             request_url = f"{url}?page={page}&per_page={per_page}"
-            logging.debug(f"Requesting URL: {request_url}")
+            logger.debug(f"Requesting URL: {request_url}")
             response = self.client.get(request_url)
             response.raise_for_status()
             data = response.json()
             if not data:
-                logging.info(f"No more data received after page {page}.")
+                logger.info(f"No more data received after page {page}.")
                 break
 
-            logging.debug(f"Processing {len(data)} releases from page {page}.")
+            logger.debug(f"Processing {len(data)} releases from page {page}.")
 
             for release in data:
                 tag = release.get("tag_name", "N/A")
                 published_at = release.get("published_at")
 
                 if not published_at or tag == "N/A":
-                    logging.warning(
+                    logger.warning(
                         f"Skipping malformed release: tag={tag}, published_at={published_at}"
                     )
                     continue
@@ -253,21 +253,21 @@ class GodotFetcher:
                         user_platform, user_arch, csharp=False
                     ) or godot_release.get_asset(user_platform, user_arch, csharp=True)
                     if not asset_found:
-                        logging.debug(
+                        logger.debug(
                             f"Skipping {tag}: No asset found for {user_platform}/{user_arch}"
                         )
                         continue
 
                 releases.append(godot_release)
                 if max_releases and len(releases) >= max_releases:
-                    logging.info(f"Reached max_releases limit of {max_releases}.")
+                    logger.info(f"Reached max_releases limit of {max_releases}.")
                     break
 
             if max_releases and len(releases) >= max_releases:
                 break
 
             if len(data) < per_page:
-                logging.info("Finished fetching all available releases.")
+                logger.info("Finished fetching all available releases.")
                 break
 
             page += 1
@@ -277,7 +277,7 @@ class GodotFetcher:
         else:
             releases.sort(key=lambda r: r.published_at, reverse=True)
 
-        logging.info(f"Successfully fetched and cached {len(releases)} releases.")
+        logger.info(f"Successfully fetched and cached {len(releases)} releases.")
         self.cache = releases
         self._stable_only_cached = stable_only
         return releases
@@ -295,7 +295,7 @@ class GodotFetcher:
         platform_name = platform_name or detect_platform()
         arch_name = arch_name or detect_architecture()
 
-        logging.info(
+        logger.info(
             f"Attempting to find download URL for version {version} on {platform_name}/{arch_name}, mono={mono}"
         )
 
@@ -313,5 +313,5 @@ class GodotFetcher:
                 f"No download found for {platform_name} {arch_name} mono={mono} in version {version}"
             )
 
-        logging.info(f"Found asset URL for {version}: {asset.url}")
+        logger.info(f"Found asset URL for {version}: {asset.url}")
         return asset.url

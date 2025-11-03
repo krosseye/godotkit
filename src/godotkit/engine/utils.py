@@ -1,3 +1,4 @@
+import logging
 import platform
 import shutil
 import subprocess
@@ -12,6 +13,8 @@ from godotkit import common
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
 
 from .exceptions import DownloadError, ExtractError
+
+logger = logging.getLogger(__name__)
 
 
 def find_binary(dir_path: Path) -> Optional[Path]:
@@ -74,6 +77,7 @@ def start(binary_path: Path) -> None:
         ValueError: If the provided path is not a valid file.
     """
     if not binary_path.is_file():
+        logger.error("Invalid binary file path")
         raise ValueError("Invalid binary file path")
     try:
         command: list[str] = []
@@ -81,7 +85,7 @@ def start(binary_path: Path) -> None:
         subprocess.Popen(command)
 
     except Exception as e:
-        print(f"Failed to launch Godot Engine: {e}")
+        logger.error(f"Failed to launch Godot Engine: {e}")
 
 
 def remove(engine_dir: Path) -> None:
@@ -95,13 +99,17 @@ def remove(engine_dir: Path) -> None:
         ValueError: If the provided path is not a valid directory.
     """
     if not engine_dir.is_dir():
+        logger.error("Invalid engine directory path")
         raise ValueError("Invalid engine directory path")
     try:
         shutil.rmtree(engine_dir)
+        logger.info("Successfully removed Godot Engine")
+    except PermissionError as e:
+        logger.error(f"Permission error removing Godot Engine: {e}")
     except OSError as e:
-        print(f"Failed to remove Godot Engine: {e}")
+        logger.error(f"Failed to remove Godot Engine: {e}")
     except Exception as e:
-        print(f"Failed to remove Godot Engine: {e}")
+        logger.error(f"Failed to remove Godot Engine: {e}")
 
 
 def download_and_extract(

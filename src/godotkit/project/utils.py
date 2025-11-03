@@ -1,7 +1,10 @@
+import logging
 import subprocess
 from pathlib import Path
 
 from godotkit import common
+
+logger = logging.getLogger(__name__)
 
 
 def open_directory(project_dir: Path) -> None:
@@ -30,9 +33,11 @@ def start(binary_path: Path, project_path: Path) -> None:
         ValueError: If the provided path is not a valid file.
     """
     if not binary_path.is_file():
+        logger.error("Invalid binary file path")
         raise ValueError("Invalid binary file path")
 
     if project_path.is_dir() or not str(project_path).endswith(".godot"):
+        logger.error("Invalid project file path")
         raise ValueError("Invalid project file path")
 
     try:
@@ -41,4 +46,4 @@ def start(binary_path: Path, project_path: Path) -> None:
         command.append("-e")
         subprocess.Popen(command, cwd=project_path.parent)
     except Exception as e:
-        print(f"Failed to launch Godot Engine: {e}")
+        logger.error(f"Failed to launch Godot Engine: {e}")
