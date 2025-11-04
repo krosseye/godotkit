@@ -5,8 +5,9 @@ icon: material/information
 ![GodotKit](images/banner.png)
 
 ![Tests Status](https://github.com/krosseye/godotkit/actions/workflows/tests.yml/badge.svg)
+![Docs Status](https://github.com/krosseye/godotkit/actions/workflows/docs.yml/badge.svg)
 ![Build and Release Status](https://github.com/krosseye/godotkit/actions/workflows/release.yml/badge.svg)
 
-Python functions and classes for working with [Godot Engine](https://godotengine.org/) releases and projects.
+**GodotKit** is a Python library providing functions and classes for the automation of tasks related to [Godot Engine](https://godotengine.org/) releases and projects.
 
-*This package was originally developed for [GoGo](https://github.com/krosseye/gogo), but can be used standalone.*
+It was originally developed to power [GoGo](https://github.com/krosseye/gogo), but is a standalone package that can be used in any Python project requiring programmatic interaction with Godot files and versions.
