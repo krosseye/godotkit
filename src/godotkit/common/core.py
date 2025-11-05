@@ -1,6 +1,7 @@
 import logging
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,12 +25,17 @@ def open_directory(path: Path) -> None:
         raise ValueError("Invalid directory path")
 
     current_platform = platform.system().lower()
+    quoted_path = shlex.quote(str(path))
+
     if current_platform == "windows":
-        os.startfile(path)
+        if hasattr(os, "startfile"):
+            os.startfile(str(path))
+        else:
+            run_command(["cmd", "/C", "start", quoted_path])
     elif current_platform == "darwin":
-        run_command(["open", str(path)])
+        run_command(["open", quoted_path])
     elif current_platform == "linux":
-        run_command(["xdg-open", str(path)])
+        run_command(["xdg-open", quoted_path])
     else:
         raise NotImplementedError(f"Unsupported platform: {current_platform}")
 
