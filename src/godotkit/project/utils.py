@@ -1,8 +1,8 @@
 import logging
-import subprocess
 from pathlib import Path
 
-from godotkit import common
+from godotkit.common import open_directory as open_dir
+from godotkit.common import run_command
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def open_directory(project_dir: Path) -> None:
         ValueError: If the provided path is not a valid project directory.
         NotImplementedError: If the current platform is unsupported.
     """
-    common.open_directory(project_dir)
+    open_dir(project_dir)
 
 
 def start(binary_path: Path, project_path: Path) -> None:
@@ -44,6 +44,7 @@ def start(binary_path: Path, project_path: Path) -> None:
         command: list[str] = []
         command.append(str(binary_path))
         command.append("-e")
-        subprocess.Popen(command, cwd=project_path.parent)
+        run_command(command, working_dir=project_path.parent)
+
     except Exception as e:
         logger.error(f"Failed to launch Godot Engine: {e}")

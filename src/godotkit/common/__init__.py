@@ -1,4 +1,10 @@
-from .core import open_directory
+from .core import open_directory, remove_directory, run_command
 from .git import clone, git_installed
 
-__all__ = ["open_directory", "clone", "git_installed"]
+__all__ = [
+    "open_directory",
+    "remove_directory",
+    "run_command",
+    "clone",
+    "git_installed",
+]

@@ -1,7 +1,6 @@
 import logging
 import platform
 import shutil
-import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
@@ -9,7 +8,8 @@ from typing import Callable, Optional
 
 import httpx
 
-from godotkit import common
+from godotkit.common import open_directory as open_dir
+from godotkit.common import remove_directory, run_command
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
 
 from .exceptions import DownloadError, ExtractError
@@ -63,7 +63,7 @@ def open_directory(engine_dir: Path) -> None:
         ValueError: If the provided path is not a valid directory.
         NotImplementedError: If the current platform is unsupported.
     """
-    common.open_directory(engine_dir)
+    open_dir(engine_dir)
 
 
 def start(binary_path: Path) -> None:
@@ -79,13 +79,14 @@ def start(binary_path: Path) -> None:
     if not binary_path.is_file():
         logger.error("Invalid binary file path")
         raise ValueError("Invalid binary file path")
+
     try:
         command: list[str] = []
         command.append(str(binary_path))
-        subprocess.Popen(command)
+        run_command(command)
 
     except Exception as e:
-        logger.error(f"Failed to launch Godot Engine: {e}")
+        logger.exception(f"Failed to launch Godot Engine: {e}")
 
 
 def remove(engine_dir: Path) -> None:
@@ -96,20 +97,11 @@ def remove(engine_dir: Path) -> None:
         engine_dir (Path): The path to the directory to remove.
 
     Raises:
-        ValueError: If the provided path is not a valid directory.
+        ValueError: If the path does not exist or is not a directory.
+        OSError: If an OS-related error occurs during deletion.
+        PermissionError: If the process lacks permission to delete files or subdirectories.
     """
-    if not engine_dir.is_dir():
-        logger.error("Invalid engine directory path")
-        raise ValueError("Invalid engine directory path")
-    try:
-        shutil.rmtree(engine_dir)
-        logger.info("Successfully removed Godot Engine")
-    except PermissionError as e:
-        logger.error(f"Permission error removing Godot Engine: {e}")
-    except OSError as e:
-        logger.error(f"Failed to remove Godot Engine: {e}")
-    except Exception as e:
-        logger.error(f"Failed to remove Godot Engine: {e}")
+    remove_directory(engine_dir)
 
 
 def download_and_extract(
