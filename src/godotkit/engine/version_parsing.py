@@ -251,3 +251,8 @@ class GodotVersion:
     def is_dotnet(self) -> bool:
         """Checks if the version is a .NET build (Godot 4+ with C#)."""
         return self.csharp_enabled and self.major >= 4
+
+    @property
+    def major_minor(self) -> float:
+        """Returns the major and minor version numbers combined as a float"""
+        return float(f"{self.major}.{self.minor}")

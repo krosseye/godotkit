@@ -53,6 +53,8 @@ class GodotEngine:
         Recursively removes the Godot Engine installation directory.
 
         Raises:
-            ValueError: If the path is not a valid directory.
+            ValueError: If the path does not exist or is not a directory.
+            OSError: If an OS-related error occurs during deletion.
+            PermissionError: If the process lacks permission to delete files or subdirectories.
         """
         remove(self.directory_path)

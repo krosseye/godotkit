@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 from godotkit.common import open_directory as open_dir
-from godotkit.common import run_command
+from godotkit.common import remove_directory, run_command
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +30,15 @@ def start(binary_path: Path, project_path: Path) -> None:
         project_path (Path): The '.godot' project file path.
 
     Raises:
-        ValueError: If the provided path is not a valid file.
+        FileNotFoundError: If the provided path is not a valid file.
     """
     if not binary_path.is_file():
         logger.error("Invalid binary file path")
-        raise ValueError("Invalid binary file path")
+        raise FileNotFoundError("Invalid binary file path")
 
     if project_path.is_dir() or not str(project_path).endswith(".godot"):
         logger.error("Invalid project file path")
-        raise ValueError("Invalid project file path")
+        raise FileNotFoundError("Invalid project file path")
 
     try:
         command: list[str] = []
@@ -48,3 +48,18 @@ def start(binary_path: Path, project_path: Path) -> None:
 
     except Exception as e:
         logger.error(f"Failed to launch Godot Engine: {e}")
+
+
+def remove(project_path: Path) -> None:
+    """
+    Recursively removes the provided project directory.
+
+    Args:
+        project_path (Path): The '.godot' project file path.
+
+    Raises:
+        ValueError: If the path does not exist or is not a directory.
+        OSError: If an OS-related error occurs during deletion.
+        PermissionError: If the process lacks permission to delete files or subdirectories.
+    """
+    remove_directory(project_path)

@@ -1,3 +1,5 @@
-from . import utils
+from . import parse, utils
+from .parse import ProjectMetadata
+from .project import GodotProject
 
-__all__ = ["utils"]
+__all__ = ["parse", "utils", "ProjectMetadata", "GodotProject"]

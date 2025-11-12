@@ -19,6 +19,8 @@ nav:
           - api_reference/engine/utils.md
           - api_reference/engine/version_parsing.md
       - Project:
+          - api_reference/project/parse.md
+          - api_reference/project/project.md
           - api_reference/project/utils.md
 
 markdown_extensions:

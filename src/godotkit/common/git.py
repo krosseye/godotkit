@@ -26,6 +26,47 @@ def git_installed() -> bool:
     return True
 
 
+def init_repo(
+    dir_path: Path, gitignore: Optional[str] = None, gitattributes: Optional[str] = None
+) -> bool:
+    """
+    Initializes a Git repository in the given directory.
+
+    Args:
+        dir_path: The directory where the repository will be initialized.
+        gitignore: Optional content for the .gitignore file.
+        gitattributes: Optional content for the .gitattributes file.
+
+    Returns:
+        True if initialization was successful, False otherwise.
+    """
+    if not git_installed():
+        logger.error("Git is not installed. Skipping initialization.")
+        return False
+
+    dir_path.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(["git", "init"], cwd=dir_path, check=True)
+        logger.info(f"Successfully initialized Git repository in {dir_path}")
+        if gitignore:
+            gitignore_file = dir_path / ".gitignore"
+            gitignore_file.write_text(gitignore, encoding="utf-8")
+            logger.debug(f"Created .gitignore file in {dir_path}")
+        if gitattributes:
+            gitattributes_file = dir_path / ".gitattributes"
+            gitattributes_file.write_text(gitattributes, encoding="utf-8")
+            logger.debug(f"Created .gitattributes file in {dir_path}")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            f"Failed to initialize Git repository: {e}. Command: {' '.join(e.cmd)}"
+        )
+        return False
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during Git initialization: {e}")
+        return False
+
+
 def clone(
     repo_url: str,
     output_dir: Union[str, Path],
