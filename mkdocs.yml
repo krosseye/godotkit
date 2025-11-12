@@ -18,6 +18,7 @@ nav:
           - api_reference/engine/release_fetcher.md
           - api_reference/engine/utils.md
           - api_reference/engine/version_parsing.md
+      - api_reference/feed.md
       - Project:
           - api_reference/project/parse.md
           - api_reference/project/project.md
