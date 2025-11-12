@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.0 (2025-11-12)
+
+### Features
+
+- Implement RSS feed fetcher
+  ([`9ad0d99`](https://github.com/krosseye/godotkit/commit/9ad0d9952391c29473ce76fd038b25fdf4a219c1))
+
+
 ## v0.2.0 (2025-11-12)
 
 ### Chores
