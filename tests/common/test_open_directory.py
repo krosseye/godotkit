@@ -34,7 +34,7 @@ class TestOpenDirectory:
     ):
         monkeypatch.setattr(platform, "system", lambda: platform_name)
 
-        mock_run_command = mocker.patch("godotkit.common.core.run_command")
+        mock_run_command = mocker.patch("godotkit.common.core.run_utility_command")
 
         if platform_name == "Windows":
             monkeypatch.delattr(os, "startfile", raising=False)
@@ -56,7 +56,7 @@ class TestOpenDirectory:
 
         mock_startfile.assert_called_once_with(str(dummy_dir))
 
-        mock_run_command = mocker.patch("godotkit.common.core.run_command")
+        mock_run_command = mocker.patch("godotkit.common.core.run_utility_command")
         mock_run_command.assert_not_called()
 
     def test_open_directory_with_invalid_path_raises_valueerror(self, tmp_path: Path):

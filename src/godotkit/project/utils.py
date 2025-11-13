@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 
+from godotkit.common import launch_daemon_command, remove_directory
 from godotkit.common import open_directory as open_dir
-from godotkit.common import remove_directory, run_command
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def start(binary_path: Path, project_path: Path) -> None:
         command: list[str] = []
         command.append(str(binary_path))
         command.append("-e")
-        run_command(command, working_dir=project_path.parent)
+        launch_daemon_command(command, working_dir=project_path.parent)
 
     except Exception as e:
         logger.error(f"Failed to launch Godot Engine: {e}")

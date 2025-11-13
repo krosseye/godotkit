@@ -157,9 +157,7 @@ def read(project_path: Path) -> ProjectMetadata:
             engine_version = GodotVersion.parse(version_str)
             data["engine_version"] = engine_version
             data["engine_version_hint"] = engine_version.major_minor
-            logger.info(
-                f"Detected engine version from .godot-version: {engine_version}"
-            )
+
     if compatibility_features:
         data["compatibility_version"] = float(compatibility_features)
 
