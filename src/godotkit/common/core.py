@@ -31,11 +31,11 @@ def open_directory(path: Path) -> None:
         if hasattr(os, "startfile"):
             os.startfile(str(path))
         else:
-            run_command(["cmd", "/C", "start", quoted_path])
+            run_utility_command(["cmd", "/C", "start", quoted_path])
     elif current_platform == "darwin":
-        run_command(["open", quoted_path])
+        run_utility_command(["open", quoted_path])
     elif current_platform == "linux":
-        run_command(["xdg-open", quoted_path])
+        run_utility_command(["xdg-open", quoted_path])
     else:
         raise NotImplementedError(f"Unsupported platform: {current_platform}")
 
@@ -63,33 +63,33 @@ def remove_directory(dir_path: Path) -> None:
         raise
 
 
-def run_command(
+def run_utility_command(
     command: list[str],
     working_dir: Optional[Path] = None,
     timeout: Optional[int] = None,
 ) -> subprocess.CompletedProcess:
-    """Runs a system command.
+    """Runs a system command, waits for it to complete, and captures output.
 
     Args:
         command (List[str]): Command and arguments, e.g. ['ls', '-l'].
-        working_dir (Optional[str]): Working directory for the command.
+        working_dir (Optional[Path]): Working directory for the command.
         timeout (Optional[int]): Timeout in seconds.
 
     Returns:
         subprocess.CompletedProcess: Result object containing stdout, stderr, and return code.
 
     Raises:
-        subprocess.CalledProcessError: If the command fails.
+        subprocess.CalledProcessError: If the command fails (non-zero return code).
         subprocess.TimeoutExpired: If the command times out.
         ValueError: If the working directory is invalid.
     """
     cmd_str = " ".join(command)
-    logger.debug("Executing command: %s", cmd_str)
+    logger.debug("Executing utility command: %s", cmd_str)
 
     if working_dir is not None and not working_dir.is_dir():
         raise ValueError(f"Invalid working directory: {working_dir}")
 
-    result = subprocess.run(
+    return subprocess.run(
         command,
         cwd=None if working_dir is None else str(working_dir),
         timeout=timeout,
@@ -98,5 +98,42 @@ def run_command(
         text=True,
     )
 
-    logger.debug("Command finished successfully.")
-    return result
+
+def launch_daemon_command(
+    command: list[str],
+    working_dir: Optional[Path] = None,
+) -> None:
+    """Launches a system command in a non-blocking, detached manner.
+
+    Args:
+        command (List[str]): Command and arguments, e.g. ['xdg-open', 'file.pdf'].
+        working_dir (Optional[Path]): Working directory for the command.
+
+    Raises:
+        ValueError: If the working directory is invalid.
+    """
+    cmd_str = " ".join(command)
+    logger.debug("Launching background command: %s", cmd_str)
+
+    if working_dir is not None and not working_dir.is_dir():
+        raise ValueError(f"Invalid working directory: {working_dir}")
+
+    if os.name == "nt":
+        creationflags = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        )
+        subprocess.Popen(
+            command,
+            cwd=None if working_dir is None else str(working_dir),
+            creationflags=creationflags,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        subprocess.Popen(
+            command,
+            cwd=None if working_dir is None else str(working_dir),
+            preexec_fn=os.setpgrp,  # type: ignore[attr-defined]
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )

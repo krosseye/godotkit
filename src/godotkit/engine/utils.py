@@ -8,8 +8,8 @@ from typing import Callable, Optional
 
 import httpx
 
+from godotkit.common import launch_daemon_command, remove_directory
 from godotkit.common import open_directory as open_dir
-from godotkit.common import remove_directory, run_command
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
 
 from .exceptions import DownloadError, ExtractError
@@ -83,7 +83,7 @@ def start(binary_path: Path) -> None:
     try:
         command: list[str] = []
         command.append(str(binary_path))
-        run_command(command)
+        launch_daemon_command(command)
 
     except Exception as e:
         logger.exception(f"Failed to launch Godot Engine: {e}")
