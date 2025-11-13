@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.1 (2025-11-13)
+
+### Bug Fixes
+
+- Run engine detached
+  ([`633f4ef`](https://github.com/krosseye/godotkit/commit/633f4efe12bb30e5e4ef7870b5ae7dee3dfb9d12))
+
+
 ## v0.3.0 (2025-11-12)
 
 ### Features
