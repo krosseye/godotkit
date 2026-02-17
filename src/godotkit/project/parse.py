@@ -1,8 +1,12 @@
 import logging
+import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional, TypedDict, Union
+
+from filelock import FileLock
 
 from ..common.git import init_repo
 from ..engine.version_parsing import GodotVersion
@@ -243,15 +247,24 @@ def write_property(project_path: Path, key: str, value: str):
     if not project_path.exists():
         raise FileNotFoundError(f"Project file not found: {project_path}")
 
-    with open(project_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+    lock_path = project_path.with_suffix(project_path.suffix + ".lock")
+    lock = FileLock(lock_path)
 
-    with open(project_path, "w", encoding="utf-8") as f:
-        for line in lines:
-            if line.startswith(key):
-                f.write(value)
-            else:
-                f.write(line)
+    with lock:
+        with open(project_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        with tempfile.NamedTemporaryFile(
+            "w", delete=False, encoding="utf-8", dir=project_path.parent
+        ) as tf:
+            temp_name = tf.name
+            for line in lines:
+                if line.startswith(key):
+                    tf.write(value)
+                else:
+                    tf.write(line)
+
+        os.replace(temp_name, project_path)
 
 
 def set_name(project_path: Path, name: str):
