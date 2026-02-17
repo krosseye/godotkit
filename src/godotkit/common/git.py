@@ -9,6 +9,8 @@ from godotkit.constants import GIT_CLONE_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
+_GIT_INSTALLED: bool | None = None
+
 
 def git_installed() -> bool:
     """
@@ -17,13 +19,20 @@ def git_installed() -> bool:
     Returns:
         True if Git is installed, False otherwise.
     """
-    git_path = shutil.which("git")
-    if git_path is None:
-        logger.warning("Git is not installed or not found in PATH.")
-        return False
+    global _GIT_INSTALLED
 
-    logger.debug("Git found at: %s", git_path)
-    return True
+    if _GIT_INSTALLED is not None:
+        return _GIT_INSTALLED
+    else:
+        git_path = shutil.which("git")
+        if git_path is None:
+            logger.warning("Git is not installed or not found in PATH.")
+            _GIT_INSTALLED = False
+            return False
+
+        logger.debug("Git found at: %s", git_path)
+        _GIT_INSTALLED = True
+        return True
 
 
 def init_repo(

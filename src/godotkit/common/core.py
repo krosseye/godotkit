@@ -133,7 +133,7 @@ def launch_daemon_command(
         subprocess.Popen(
             command,
             cwd=None if working_dir is None else str(working_dir),
-            preexec_fn=os.setpgrp,  # type: ignore[attr-defined]
+            start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
