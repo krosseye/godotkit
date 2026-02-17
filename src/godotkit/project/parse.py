@@ -232,6 +232,77 @@ def create(
     logger.info(f"Successfully created project at: {project_dir.resolve()}")
 
 
+def update(project_path: Path, metadata: ProjectMetadata) -> None:
+    """
+    Updates the project metadata if it differs from the provided metadata.
+
+    Args:
+        project_path (Path): Path to the project.godot file.
+        metadata (ProjectMetadata): The new metadata to apply.
+    """
+    current_metadata = read(project_path)
+
+    updates: dict[str, str] = {}
+
+    if "name" in metadata and metadata["name"] != current_metadata.get("name"):
+        updates["config/name="] = f'config/name="{metadata["name"]}"\n'
+
+    if "description" in metadata and metadata["description"] != current_metadata.get(
+        "description"
+    ):
+        updates["config/description="] = (
+            f'config/description="{metadata["description"]}"\n'
+        )
+
+    if "version" in metadata and metadata["version"] != current_metadata.get("version"):
+        if metadata["version"] is not None:
+            updates["config/version="] = f'config/version="{metadata["version"]}"\n'
+
+    if "tags" in metadata and metadata["tags"] != current_metadata.get("tags"):
+        if metadata["tags"] is not None:
+            tag_array = ",".join(f'"{tag}"' for tag in metadata["tags"])
+            updates["config/tags="] = f"config/tags=PackedStringArray({tag_array})\n"
+
+    if "compatibility_version" in metadata and metadata[
+        "compatibility_version"
+    ] != current_metadata.get("compatibility_version"):
+        val = metadata["compatibility_version"]
+        if val is not None:
+            if isinstance(val, GodotVersion):
+                val = val.major_minor
+            updates["config/features="] = (
+                f'config/features=PackedStringArray("{val}")\n'
+            )
+
+    if updates:
+        if not project_path.exists():
+            raise FileNotFoundError(f"Project file not found: {project_path}")
+
+        lock_path = project_path.with_suffix(project_path.suffix + ".lock")
+        with FileLock(lock_path):
+            with open(project_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            with tempfile.NamedTemporaryFile(
+                "w", delete=False, encoding="utf-8", dir=project_path.parent
+            ) as tf:
+                temp_name = tf.name
+                for line in lines:
+                    for key, value in updates.items():
+                        if line.startswith(key):
+                            tf.write(value)
+                            break
+                    else:
+                        tf.write(line)
+            os.replace(temp_name, project_path)
+
+    if "engine_version" in metadata and metadata[
+        "engine_version"
+    ] != current_metadata.get("engine_version"):
+        if metadata["engine_version"] is not None:
+            set_engine_version(project_path, metadata["engine_version"])
+
+
 def write_property(project_path: Path, key: str, value: str):
     """
     Writes a property to the given project file.
