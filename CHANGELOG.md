@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-02-17)
+
+### Features
+
+- Add project update function
+  ([`4daa1df`](https://github.com/krosseye/godotkit/commit/4daa1dfe7b6324d2f62280f83391e3190206def4))
+
+### Refactoring
+
+- Make project write operations atomic
+  ([`2a352c8`](https://github.com/krosseye/godotkit/commit/2a352c8cc3f117842cb5ebd59b5c3f3e8821cd0b))
+
+
 ## v0.3.1 (2025-11-13)
 
 ### Bug Fixes
