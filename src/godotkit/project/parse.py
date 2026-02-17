@@ -296,6 +296,12 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
                         tf.write(line)
             os.replace(temp_name, project_path)
 
+    if "icon_path" in metadata and metadata["icon_path"] != current_metadata.get(
+        "icon_path"
+    ):
+        if metadata["icon_path"] is not None:
+            set_project_icon(project_path, metadata["icon_path"])
+
     if "engine_version" in metadata and metadata[
         "engine_version"
     ] != current_metadata.get("engine_version"):
@@ -303,7 +309,9 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
             set_engine_version(project_path, metadata["engine_version"])
 
 
-def write_property(project_path: Path, key: str, value: str):
+def write_property(
+    project_path: Path, key: str, value: str, category: str = "application"
+):
     """
     Writes a property to the given project file.
 
@@ -325,15 +333,41 @@ def write_property(project_path: Path, key: str, value: str):
         with open(project_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
+        updated_lines = []
+        target_section_header = f"[{category}]"
+        is_inside_target_section = False
+        setting_was_found_and_updated = False
+
+        formatted_setting_line = f'{key}="{value}"\n'
+
+        for line in lines:
+            stripped_line = line.strip()
+
+            if stripped_line.startswith("[") and stripped_line.endswith("]"):
+                if is_inside_target_section and not setting_was_found_and_updated:
+                    updated_lines.append(formatted_setting_line)
+                    setting_was_found_and_updated = True
+
+                is_inside_target_section = stripped_line == target_section_header
+
+            if is_inside_target_section and stripped_line.startswith(key):
+                updated_lines.append(formatted_setting_line)
+                setting_was_found_and_updated = True
+            else:
+                updated_lines.append(line)
+
+        if not setting_was_found_and_updated:
+            if is_inside_target_section:
+                updated_lines.append(formatted_setting_line)
+            else:
+                updated_lines.append(f"\n{target_section_header}\n")
+                updated_lines.append(formatted_setting_line)
+
         with tempfile.NamedTemporaryFile(
             "w", delete=False, encoding="utf-8", dir=project_path.parent
         ) as tf:
             temp_name = tf.name
-            for line in lines:
-                if line.startswith(key):
-                    tf.write(value)
-                else:
-                    tf.write(line)
+            tf.writelines(updated_lines)
 
         os.replace(temp_name, project_path)
 
@@ -439,3 +473,27 @@ def set_compatibility_version(
         "config/features=",
         f'config/features=PackedStringArray("{engine_version}")\n',
     )
+
+
+def set_project_icon(project_path: Path, icon_path: Path):
+    """
+    Copies the provided icon to the project directory.
+
+    Args:
+        project_path (Path): Path to the project file.
+        icon_path (Path): Path to the icon file.
+
+    Raises:
+        FileNotFoundError: If the provided path is not a valid file.
+    """
+    if not icon_path.is_file():
+        raise FileNotFoundError(f"Source icon file not found: {icon_path}")
+
+    project_root_directory = project_path.parent
+    destination_icon_path = project_root_directory / icon_path.name
+
+    shutil.copy2(icon_path, destination_icon_path)
+
+    godot_internal_resource_path = f"res://{icon_path.name}"
+
+    write_property(project_path, "config/icon", godot_internal_resource_path)
