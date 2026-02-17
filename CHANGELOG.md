@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.4.2 (2026-02-17)
+
+### Bug Fixes
+
+- Small fixes
+  ([`8fe8f69`](https://github.com/krosseye/godotkit/commit/8fe8f6967b32b75e09b1d02f4f19962e64ba3f52))
+
+### Refactoring
+
+- Add icon replacement to update
+  ([`08600b9`](https://github.com/krosseye/godotkit/commit/08600b93a872018bdea3e5d6002f6594cbaf084a))
+
+
 ## v0.4.1 (2026-02-17)
 
 
