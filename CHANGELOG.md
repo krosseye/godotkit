@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.4.3 (2026-02-18)
+
+### Bug Fixes
+
+- Fix failing 3.9 build
+  ([`462a6b7`](https://github.com/krosseye/godotkit/commit/462a6b70e690498325d5bafd83cd6838e7233853))
+
+- Project icon not replacing
+  ([`1acba83`](https://github.com/krosseye/godotkit/commit/1acba836c189a8e2d298682422961012748f2124))
+
+
 ## v0.4.2 (2026-02-17)
 
 ### Bug Fixes
