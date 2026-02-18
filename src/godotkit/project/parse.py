@@ -486,14 +486,26 @@ def set_project_icon(project_path: Path, icon_path: Path):
     Raises:
         FileNotFoundError: If the provided path is not a valid file.
     """
+    project_path = project_path.resolve()
+    icon_path = icon_path.resolve()
+
+    if not project_path.is_file():
+        raise FileNotFoundError(f"Project file not found: {project_path}")
+
     if not icon_path.is_file():
         raise FileNotFoundError(f"Source icon file not found: {icon_path}")
 
     project_root_directory = project_path.parent
-    destination_icon_path = project_root_directory / icon_path.name
+    destination_icon_path = project_root_directory / f"icon{icon_path.suffix}"
+
+    if destination_icon_path.exists() and destination_icon_path.samefile(icon_path):
+        return
+
+    for p in project_root_directory.glob("icon.*"):
+        if p.is_file():
+            p.unlink()
 
     shutil.copy2(icon_path, destination_icon_path)
 
-    godot_internal_resource_path = f"res://{icon_path.name}"
-
+    godot_internal_resource_path = f"res://{destination_icon_path.name}"
     write_property(project_path, "config/icon", godot_internal_resource_path)
