@@ -9,7 +9,7 @@ from godotkit.constants import GIT_CLONE_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
-_GIT_INSTALLED: bool | None = None
+_GIT_INSTALLED: Optional[bool] = None
 
 
 def git_installed() -> bool:
