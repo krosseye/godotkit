@@ -1,6 +1,6 @@
 [project]
 name = "godotkit"
-version = "0.4.3"
+version = "0.5.0"
 description = "Python utilities and classes for working with Godot engine releases and projects."
 license = { file = "LICENSE" }
 readme = "README.md"
