@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,7 +37,10 @@ def git_installed() -> bool:
 
 
 def init_repo(
-    dir_path: Path, gitignore: Optional[str] = None, gitattributes: Optional[str] = None
+    dir_path: Path,
+    gitignore: Optional[str] = None,
+    gitattributes: Optional[str] = None,
+    initial_branch: str = "main",
 ) -> bool:
     """
     Initializes a Git repository in the given directory.
@@ -45,34 +49,42 @@ def init_repo(
         dir_path: The directory where the repository will be initialized.
         gitignore: Optional content for the .gitignore file.
         gitattributes: Optional content for the .gitattributes file.
+        initial_branch: The name to use for the initial branch.
 
     Returns:
         True if initialization was successful, False otherwise.
     """
+    if not re.match(r"^[a-zA-Z0-9_\-\./]+$", initial_branch):
+        logger.error(f"Invalid branch name provided: '{initial_branch}'.")
+        return False
+
     if not git_installed():
         logger.error("Git is not installed. Skipping initialization.")
         return False
 
     dir_path.mkdir(parents=True, exist_ok=True)
     try:
-        subprocess.run(["git", "init"], cwd=dir_path, check=True)
+        subprocess.run(
+            ["git", "init", "-b", initial_branch],
+            cwd=dir_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         logger.info(f"Successfully initialized Git repository in {dir_path}")
         if gitignore:
-            gitignore_file = dir_path / ".gitignore"
-            gitignore_file.write_text(gitignore, encoding="utf-8")
-            logger.debug(f"Created .gitignore file in {dir_path}")
+            (dir_path / ".gitignore").write_text(gitignore, encoding="utf-8")
         if gitattributes:
-            gitattributes_file = dir_path / ".gitattributes"
-            gitattributes_file.write_text(gitattributes, encoding="utf-8")
-            logger.debug(f"Created .gitattributes file in {dir_path}")
+            (dir_path / ".gitattributes").write_text(gitattributes, encoding="utf-8")
         return True
     except subprocess.CalledProcessError as e:
         logger.error(
-            f"Failed to initialize Git repository: {e}. Command: {' '.join(e.cmd)}"
+            f"Failed to initialize Git repository: {e.stderr.strip()}. "
+            f"Command: {' '.join(e.cmd)}"
         )
         return False
     except Exception as e:
-        logger.error(f"An unexpected error occurred during Git initialization: {e}")
+        logger.error(f"An unexpected error occurred: {e}")
         return False
 
 
