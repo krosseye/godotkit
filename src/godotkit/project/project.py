@@ -1,19 +1,10 @@
 from pathlib import Path
-from typing import Optional, Union
+from typing import cast
 
 from godotkit.project.utils import open_directory
 
 from ..engine.version_parsing import GodotVersion
-from .parse import (
-    ProjectMetadata,
-    read,
-    set_compatibility_version,
-    set_description,
-    set_engine_version,
-    set_name,
-    set_tags,
-    set_version,
-)
+from .parse import ProjectMetadata, read, update
 from .utils import remove, start
 
 
@@ -39,6 +30,10 @@ class GodotProject:
 
         self.metadata: ProjectMetadata = read(self._file_path)
 
+    def _update(self, **changes) -> None:
+        update(self._file_path, cast(ProjectMetadata, changes))
+        self.metadata = read(self._file_path)
+
     @property
     def name(self) -> str:
         """
@@ -51,8 +46,7 @@ class GodotProject:
         """
         Sets the name of the project.
         """
-        set_name(self._file_path, value)
-        self.metadata["name"] = value
+        self._update(name=value)
 
     @property
     def description(self) -> str:
@@ -66,8 +60,7 @@ class GodotProject:
         """
         Sets the description of the project.
         """
-        set_description(self._file_path, value)
-        self.metadata["description"] = value
+        self._update(description=value)
 
     @property
     def version(self) -> str:
@@ -81,11 +74,10 @@ class GodotProject:
         """
         Sets the version of the project.
         """
-        set_version(self._file_path, value)
-        self.metadata["version"] = value
+        self._update(version=value)
 
     @property
-    def tags(self) -> Optional[list[str]]:
+    def tags(self) -> list[str] | None:
         """
         Returns the list of tags associated with the project.
         """
@@ -96,8 +88,7 @@ class GodotProject:
         """
         Sets the list of tags associated with the project.
         """
-        set_tags(self._file_path, value)
-        self.metadata["tags"] = value
+        self._update(tags=value)
 
     @property
     def file_path(self) -> Path:
@@ -114,14 +105,14 @@ class GodotProject:
         return self._file_path.parent
 
     @property
-    def icon_path(self) -> Optional[Path]:
+    def icon_path(self) -> Path | None:
         """
         Returns the path to the project icon.
         """
         return self.metadata.get("icon_path")
 
     @property
-    def engine_version(self) -> Optional[GodotVersion]:
+    def engine_version(self) -> GodotVersion | None:
         """
         Returns the engine version associated with the project.
         """
@@ -132,34 +123,28 @@ class GodotProject:
         """
         Sets the engine version associated with the project.
         """
-        set_engine_version(self._file_path, value)
-        self.metadata["engine_version"] = value
-        self.metadata["engine_version_hint"] = value.major_minor
+        self._update(engine_version=value)
 
     @property
-    def engine_version_hint(self) -> Optional[float]:
+    def engine_version_hint(self) -> float | None:
         """
         Returns the major.minor version of the engine associated with the project.
         """
         return self.metadata.get("engine_version_hint")
 
     @property
-    def compatibility_version(self) -> Optional[float]:
+    def compatibility_version(self) -> float | None:
         """
         Returns the compatibility version associated with the project.
         """
         return self.metadata.get("compatibility_version")
 
     @compatibility_version.setter
-    def compatibility_version(self, value: Union[GodotVersion, float]) -> None:
+    def compatibility_version(self, value: GodotVersion | float) -> None:
         """
         Sets the compatibility version associated with the project.
         """
-        if isinstance(value, GodotVersion):
-            value = value.major_minor
-
-        set_compatibility_version(self._file_path, value)
-        self.metadata["compatibility_version"] = value
+        self._update(compatibility_version=value)
 
     def start(self, binary_path: Path) -> None:
         """
