@@ -1,7 +1,6 @@
 import logging
 import platform
 from datetime import datetime
-from typing import List, Optional
 
 import httpx
 
@@ -61,15 +60,15 @@ class GodotRelease:
         self,
         version: str,
         published_at: datetime,
-        assets: List[GodotAsset],
+        assets: list[GodotAsset],
     ):
         self.version = version
         self.published_at = published_at
         self.assets = assets
 
     def get_asset(
-        self, platform: str, arch: Optional[str] = None, csharp: bool = False
-    ) -> Optional[GodotAsset]:
+        self, platform: str, arch: str | None = None, csharp: bool = False
+    ) -> GodotAsset | None:
         """
         Retrieves a matching asset based on platform, architecture, and mono status.
         'arch' must be explicitly provided.
@@ -148,20 +147,14 @@ class GodotFetcher:
 
     def __init__(self, timeout: float = RELEASE_FETCHER_TIMEOUT):
         self.client = httpx.Client(timeout=timeout, headers={"User-Agent": USER_AGENT})
-        self.cache: List[GodotRelease] = []
-        self._stable_only_cached: Optional[bool] = None
+        self.cache: list[GodotRelease] = []
+        self._stable_only_cached: bool | None = None
 
     @staticmethod
     def version_sort_key(tag: str, csharp: bool = False) -> GodotVersion:
         """Converts a release tag like '4.5.1-stable' into a GodotVersion object for sorting."""
         try:
-            tag = tag.replace("-stable", "")
-            if csharp:
-                if tag.startswith("4."):
-                    tag += " (.NET)"
-                else:
-                    tag += " (Mono)"
-            return GodotVersion.parse(tag)
+            return GodotVersion.from_tag(tag, csharp)
         except ValueError:
             logger.warning(
                 f"Malformed version tag '{tag}' encountered. Sorting to bottom."
@@ -172,10 +165,10 @@ class GodotFetcher:
         self,
         stable_only: bool = True,
         sort_by: str = "version",
-        max_releases: Optional[int] = None,
+        max_releases: int | None = None,
         platform_only: bool = False,
         refresh_cache: bool = False,
-    ) -> List[GodotRelease]:
+    ) -> list[GodotRelease]:
         """
         Fetches Godot releases from GitHub.
 
@@ -195,7 +188,7 @@ class GodotFetcher:
         logger.info(f"Fetching {source} releases from GitHub.")
 
         url = self.STABLE_URL if stable_only else self.ALL_URL
-        releases: List[GodotRelease] = []
+        releases: list[GodotRelease] = []
         page = 1
         per_page = 30
 
@@ -285,8 +278,8 @@ class GodotFetcher:
     def get_download_url(
         self,
         version: str,
-        platform_name: Optional[str] = None,
-        arch_name: Optional[str] = None,
+        platform_name: str | None = None,
+        arch_name: str | None = None,
         mono: bool = False,
     ) -> str:
         """

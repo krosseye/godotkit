@@ -1,6 +1,5 @@
 import re
 from functools import total_ordering
-from typing import Set, Tuple
 
 CHANNEL_STABLE: str = "stable"
 
@@ -16,8 +15,8 @@ RELEASE_CHANNEL_RANKING = {
     CHANNEL_STABLE: 4,
 }
 
-CSHARP_PARSE_VARIANTS: Set[str] = {"mono", "dotnet", ".net"}
-CSHARP_URL_VARIANTS: Set[str] = {
+CSHARP_PARSE_VARIANTS: set[str] = {"mono", "dotnet", ".net"}
+CSHARP_URL_VARIANTS: set[str] = {
     "_mono",
     "_dotnet",
     ".net",
@@ -48,12 +47,12 @@ class GodotVersion:
     """
 
     __slots__ = (
-        "major",
-        "minor",
-        "patch",
         "channel",
         "channel_num",
         "csharp_enabled",
+        "major",
+        "minor",
+        "patch",
     )
 
     def __init__(
@@ -156,6 +155,25 @@ class GodotVersion:
         return cls(major, minor, patch, channel, channel_num, csharp_enabled)
 
     @classmethod
+    def from_tag(cls, tag: str, csharp_enabled: bool = False) -> "GodotVersion":
+        """
+        Parses a GitHub release tag string into a GodotVersion object.
+
+        Args:
+            tag: The string representation of the version tag.
+            csharp_enabled: True if this is a Mono/.NET variant build.
+
+        Returns:
+            A new GodotVersion instance.
+
+        Raises:
+            ValueError: If the version string format is invalid.
+        """
+        version = cls.parse(tag)
+        version.csharp_enabled = csharp_enabled
+        return version
+
+    @classmethod
     def from_url(cls, url: str) -> "GodotVersion":
         """
         Creates a GodotVersion from a GitHub release URL.
@@ -196,7 +214,7 @@ class GodotVersion:
 
         return cls(major, minor, patch, channel, channel_num, csharp_enabled)
 
-    def _ordering_key(self) -> Tuple[int, int, int, int, int]:
+    def _ordering_key(self) -> tuple[int, int, int, int, int]:
         """Returns a tuple suitable for ordering (ignores variant)."""
         channel_rank = RELEASE_CHANNEL_RANKING.get(self.channel, -1)
         return (
@@ -207,7 +225,7 @@ class GodotVersion:
             self.channel_num,
         )
 
-    def _equality_key(self) -> Tuple[int, int, int, int, int, str]:
+    def _equality_key(self) -> tuple[int, int, int, int, int, str]:
         """Returns a tuple suitable for strict equality checks (includes variant)."""
         channel_rank = RELEASE_CHANNEL_RANKING.get(self.channel, -1)
         return (

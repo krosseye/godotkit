@@ -165,3 +165,16 @@ class TestStringAndProperties:
         assert not v_mono.is_standard
         assert not v_dotnet.is_standard
         assert v_rc.is_standard
+
+
+class TestFromTag:
+    def test_from_tag_matches_parse_and_sets_variant(self):
+        assert GodotVersion.from_tag("4.5.1-stable") == GodotVersion(4, 5, 1)
+        assert GodotVersion.from_tag("4.6-rc2", csharp_enabled=True) == GodotVersion(
+            4, 6, 0, "rc", 2, csharp_enabled=True
+        )
+        assert GodotVersion.from_tag("3.6-stable", csharp_enabled=True).is_mono
+
+    def test_from_tag_invalid_raises_valueerror(self):
+        with pytest.raises(ValueError):
+            GodotVersion.from_tag("junk-tag")
