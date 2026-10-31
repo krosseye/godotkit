@@ -4,6 +4,7 @@ import platform
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,7 @@ def launch_daemon_command(
     if working_dir is not None and not working_dir.is_dir():
         raise ValueError(f"Invalid working directory: {working_dir}")
 
-    if os.name == "nt":
+    if sys.platform == "win32":
         creationflags = (
             subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
         )
