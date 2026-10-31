@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.6.0 (2026-10-31)
+
+### Bug Fixes
+
+- Linter issues
+  ([`2f2a15b`](https://github.com/krosseye/godotkit/commit/2f2a15b069f578c34e33fd1b741c254895a0a168))
+
+- Prevent properties from silently dropping non-existent project fields
+  ([`1b25377`](https://github.com/krosseye/godotkit/commit/1b253776446ab4068626af89c8c47a7875b56ba0))
+
+- Prevent windows calls being called on linux
+  ([`66b2c3e`](https://github.com/krosseye/godotkit/commit/66b2c3e33e597d0c9b0514baf731befea1fa2f03))
+
+### Features
+
+- Drop support for Python 3.9 and update project dependencies
+  ([`cc6c651`](https://github.com/krosseye/godotkit/commit/cc6c6510b653b7ae6a8a5103d818f5a483e494c9))
+
+### Refactoring
+
+- Move tag parsing out of GodotFetcher.version_sort_key into
+  ([`fe6b26d`](https://github.com/krosseye/godotkit/commit/fe6b26d808484f73e06225f25b98bdeac57d117e))
+
+- Update workflows
+  ([`0b1f78a`](https://github.com/krosseye/godotkit/commit/0b1f78a29dfdda4d3bc9e06ab01ab67a90989828))
+
+
 ## v0.5.0 (2026-03-08)
 
 
