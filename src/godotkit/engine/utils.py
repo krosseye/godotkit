@@ -3,8 +3,8 @@ import platform
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import httpx
 
@@ -17,7 +17,7 @@ from .exceptions import DownloadError, ExtractError
 logger = logging.getLogger(__name__)
 
 
-def find_binary(dir_path: Path) -> Optional[Path]:
+def find_binary(dir_path: Path) -> Path | None:
     """
     Finds the Godot binary in a given folder.
 
@@ -85,8 +85,8 @@ def start(binary_path: Path) -> None:
         command.append(str(binary_path))
         launch_daemon_command(command)
 
-    except Exception as e:
-        logger.exception(f"Failed to launch Godot Engine: {e}")
+    except Exception:
+        logger.exception("Failed to launch Godot Engine")
 
 
 def remove(engine_dir: Path) -> None:
@@ -109,7 +109,7 @@ def download_and_extract(
     save_path: Path,
     timeout: float = RELEASE_DOWNLOAD_TIMEOUT,
     overwrite: bool = False,
-    progress_callback: Optional[Callable[[int, Optional[int]], None]] = None,
+    progress_callback: Callable[[int, int | None], None] | None = None,
 ) -> None:
     """
     Downloads a zip file from the given URL and extracts its contents.
@@ -158,7 +158,7 @@ def download_and_extract(
                             downloaded += len(chunk)
                             if progress_callback:
                                 progress_callback(downloaded, total_bytes)
-                except IOError as e:
+                except OSError as e:
                     raise DownloadError(f"Failed to write to {temp_zip}: {e}") from e
 
         except httpx.RequestError as e:
@@ -206,5 +206,5 @@ def download_and_extract(
             raise ExtractError(
                 f"The downloaded file is not a valid zip archive: {e}"
             ) from e
-        except (IOError, OSError, shutil.Error) as e:
+        except (OSError, shutil.Error) as e:
             raise ExtractError(f"Error during extraction or file move: {e}") from e

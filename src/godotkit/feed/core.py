@@ -2,7 +2,7 @@ import datetime
 import logging
 import xml.etree.ElementTree as ET
 from abc import ABC
-from typing import List, Optional, TypedDict
+from typing import ClassVar, TypedDict
 
 import httpx
 
@@ -20,17 +20,17 @@ class RSSArticle(TypedDict):
     link: str
     summary: str
     author: str
-    date: Optional[datetime.datetime]
-    image_url: Optional[str]
+    date: datetime.datetime | None
+    image_url: str | None
 
 
 class _BaseRSSFetcher(ABC):
     FEED_URL = "https://godotengine.org/rss.xml"
     DATE_FORMAT = "%a, %d %b %Y %H:%M:%S %z"
-    NAMESPACE = {"dc": "http://purl.org/dc/elements/1.1/"}
+    NAMESPACE: ClassVar[dict[str, str]] = {"dc": "http://purl.org/dc/elements/1.1/"}
 
-    def _parse_feed(self, xml_content: bytes) -> List[RSSArticle]:
-        rss_data: List[RSSArticle] = []
+    def _parse_feed(self, xml_content: bytes) -> list[RSSArticle]:
+        rss_data: list[RSSArticle] = []
 
         try:
             root = ET.fromstring(xml_content)
@@ -41,7 +41,7 @@ class _BaseRSSFetcher(ABC):
         for item in root.findall(".//item"):
             raw_date_str = item.findtext("pubDate", default="")
 
-            parsed_date: Optional[datetime.datetime]
+            parsed_date: datetime.datetime | None
             if raw_date_str:
                 try:
                     parsed_date = datetime.datetime.strptime(
@@ -84,7 +84,7 @@ class RSSFetcher(_BaseRSSFetcher):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.client.close()
 
-    def fetch_feed(self) -> Optional[List[RSSArticle]]:
+    def fetch_feed(self) -> list[RSSArticle] | None:
         """
         Fetches the RSS feed from the network and parses it.
 
@@ -108,8 +108,8 @@ class RSSFetcher(_BaseRSSFetcher):
         except httpx.RequestError as e:
             logger.error(f"Network Error fetching RSS feed: {e}")
             return None
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
+        except Exception:
+            logger.exception("An unexpected error occurred while fetching the RSS feed")
             return None
 
 
@@ -129,7 +129,7 @@ class AsyncRSSFetcher(_BaseRSSFetcher):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
-    async def fetch_feed(self) -> Optional[List[RSSArticle]]:
+    async def fetch_feed(self) -> list[RSSArticle] | None:
         """
         Fetches the RSS feed from the network asynchronously and parses it.
 
@@ -153,6 +153,6 @@ class AsyncRSSFetcher(_BaseRSSFetcher):
         except httpx.RequestError as e:
             logger.error(f"Network Error fetching RSS feed: {e}")
             return None
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
+        except Exception:
+            logger.exception("An unexpected error occurred while fetching the RSS feed")
             return None

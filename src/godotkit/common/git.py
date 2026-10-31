@@ -3,14 +3,13 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional, Union
 from urllib.parse import urlparse
 
 from godotkit.constants import GIT_CLONE_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
-_GIT_INSTALLED: Optional[bool] = None
+_GIT_INSTALLED: bool | None = None
 
 
 def git_installed() -> bool:
@@ -38,8 +37,8 @@ def git_installed() -> bool:
 
 def init_repo(
     dir_path: Path,
-    gitignore: Optional[str] = None,
-    gitattributes: Optional[str] = None,
+    gitignore: str | None = None,
+    gitattributes: str | None = None,
     initial_branch: str = "main",
 ) -> bool:
     """
@@ -83,17 +82,17 @@ def init_repo(
             f"Command: {' '.join(e.cmd)}"
         )
         return False
-    except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
+    except Exception:
+        logger.exception("An unexpected error occurred during Git initialization")
         return False
 
 
 def clone(
     repo_url: str,
-    output_dir: Union[str, Path],
-    repo_name: Optional[str] = None,
+    output_dir: str | Path,
+    repo_name: str | None = None,
     overwrite: bool = False,
-    depth: Optional[int] = None,
+    depth: int | None = None,
 ) -> Path:
     """
     Clones a Git repository into a specified output directory.
@@ -106,7 +105,7 @@ def clone(
         depth: Optional integer for a shallow clone ('--depth').
 
     Raises:
-        Exception: If Git is not installed or the Git command fails unexpectedly.
+        RuntimeError: If Git is not installed or the Git command fails.
         ValueError: If a repository name cannot be extracted from the URL.
         RuntimeError: For specific issues during cleanup or the clone process.
 
@@ -115,7 +114,7 @@ def clone(
     """
     if not git_installed():
         logger.error("Clone aborted: Git is not installed.")
-        raise Exception("Git is not installed")
+        raise RuntimeError("Git is not installed")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -134,7 +133,7 @@ def clone(
     return repo_path
 
 
-def _get_repo_name(repo_url: str, repo_name: Optional[str]) -> str:
+def _get_repo_name(repo_url: str, repo_name: str | None) -> str:
     if repo_name:
         logger.debug("Using user-provided repository name: %s", repo_name)
         return repo_name
@@ -186,12 +185,14 @@ def _handle_existing_repo(repo_path: Path, overwrite: bool) -> bool:
         raise RuntimeError(
             f"Failed to remove existing directory {repo_path}: shutil error."
         ) from e
-    except Exception as e:
+    except OSError as e:
         logger.error("Unexpected error during removal of %s: %s", repo_path, e)
-        raise RuntimeError(f"Unexpected error during removal of {repo_path}: {e}")
+        raise RuntimeError(
+            f"Unexpected error during removal of {repo_path}: {e}"
+        ) from e
 
 
-def _execute_git_clone(repo_url: str, repo_path: Path, depth: Optional[int]) -> None:
+def _execute_git_clone(repo_url: str, repo_path: Path, depth: int | None) -> None:
     command = ["git", "clone"]
     if depth is not None and depth > 0:
         command.extend(["--depth", str(depth)])
@@ -217,16 +218,16 @@ def _execute_git_clone(repo_url: str, repo_path: Path, depth: Optional[int]) -> 
         raise RuntimeError(
             f"Git clone failed for '{repo_url}': {e.stderr.strip()}"
         ) from e
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         logger.critical("Git executable not found in PATH during execution.")
-        raise Exception("Git command not found during execution")
-    except subprocess.TimeoutExpired:
+        raise RuntimeError("Git command not found during execution") from e
+    except subprocess.TimeoutExpired as e:
         logger.error(
             "Git clone timed out after %d seconds for '%s'.",
             GIT_CLONE_TIMEOUT,
             repo_url,
         )
-        raise RuntimeError(f"Git clone timed out for '{repo_url}'.")
-    except Exception as e:
+        raise RuntimeError(f"Git clone timed out for '{repo_url}'.") from e
+    except OSError as e:
         logger.critical("Unexpected exception during git clone: %s", e)
-        raise Exception(f"Unexpected error during cloning: {e}")
+        raise RuntimeError(f"Unexpected error during cloning: {e}") from e

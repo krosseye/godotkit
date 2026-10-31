@@ -46,8 +46,8 @@ def start(binary_path: Path, project_path: Path) -> None:
         command.append("-e")
         launch_daemon_command(command, working_dir=project_path.parent)
 
-    except Exception as e:
-        logger.error(f"Failed to launch Godot Engine: {e}")
+    except Exception:
+        logger.exception("Failed to launch Godot Engine")
 
 
 def remove(project_path: Path) -> None:

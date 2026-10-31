@@ -5,7 +5,6 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +64,8 @@ def remove_directory(dir_path: Path) -> None:
 
 def run_utility_command(
     command: list[str],
-    working_dir: Optional[Path] = None,
-    timeout: Optional[int] = None,
+    working_dir: Path | None = None,
+    timeout: int | None = None,
 ) -> subprocess.CompletedProcess:
     """Runs a system command, waits for it to complete, and captures output.
 
@@ -101,7 +100,7 @@ def run_utility_command(
 
 def launch_daemon_command(
     command: list[str],
-    working_dir: Optional[Path] = None,
+    working_dir: Path | None = None,
 ) -> None:
     """Launches a system command in a non-blocking, detached manner.
 

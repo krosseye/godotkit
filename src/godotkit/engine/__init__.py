@@ -11,14 +11,14 @@ from .release_fetcher import (
 from .version_parsing import GodotVersion
 
 __all__ = [
-    "utils",
-    "GodotEngine",
     "DownloadError",
     "ExtractError",
     "GodotAsset",
+    "GodotEngine",
     "GodotFetcher",
     "GodotRelease",
+    "GodotVersion",
     "detect_architecture",
     "detect_platform",
-    "GodotVersion",
+    "utils",
 ]

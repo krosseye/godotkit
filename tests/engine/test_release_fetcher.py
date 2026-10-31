@@ -120,9 +120,11 @@ class TestDetectArchitecture:
         assert detect_architecture() == expected
 
     def test_detect_architecture_unsupported_raises_runtime_error(self):
-        with patch("platform.machine", return_value="ppc"):
-            with pytest.raises(RuntimeError, match="Unsupported CPU architecture"):
-                detect_architecture()
+        with (
+            patch("platform.machine", return_value="ppc"),
+            pytest.raises(RuntimeError, match="Unsupported CPU architecture"),
+        ):
+            detect_architecture()
 
 
 class TestGodotRelease:

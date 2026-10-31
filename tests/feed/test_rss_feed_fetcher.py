@@ -50,7 +50,7 @@ EXPECTED_ARTICLES = [
         "link": "https://godotengine.org/article/godot-4-2-is-released/",
         "summary": "Summary of Godot 4.2 features.",
         "author": "Juan Linietsky",
-        "date": datetime.datetime(2023, 9, 15, 12, 0, 0, tzinfo=datetime.timezone.utc),
+        "date": datetime.datetime(2023, 9, 15, 12, 0, 0, tzinfo=datetime.UTC),
         "image_url": "https://godotengine.org/storage/app/media/blog/4.2/godot_4.2_release_banner.png",
     },
     {
@@ -58,7 +58,7 @@ EXPECTED_ARTICLES = [
         "link": "https://godotengine.org/article/dev-snapshot-godot-4-3-dev-1/",
         "summary": "First development build for Godot 4.3.",
         "author": "Rémi Verschelde",
-        "date": datetime.datetime(2024, 1, 1, 10, 0, 0, tzinfo=datetime.timezone.utc),
+        "date": datetime.datetime(2024, 1, 1, 10, 0, 0, tzinfo=datetime.UTC),
         "image_url": None,
     },
     {
@@ -66,7 +66,7 @@ EXPECTED_ARTICLES = [
         "link": "https://godotengine.org/article/missing-fields/",
         "summary": "This post has no author or image.",
         "author": "Unknown author",
-        "date": datetime.datetime(2024, 1, 2, 11, 0, 0, tzinfo=datetime.timezone.utc),
+        "date": datetime.datetime(2024, 1, 2, 11, 0, 0, tzinfo=datetime.UTC),
         "image_url": None,
     },
     {
