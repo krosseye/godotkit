@@ -44,7 +44,43 @@ GODOT_FILE_HEADER = """; Engine configuration file.
 ;   param=value ; assign values to parameters
 """
 
+_STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"', re.DOTALL)
+_ESCAPES = {"n": "\n", "t": "\t", "r": "\r"}
+
+
 logger = logging.getLogger(__name__)
+
+
+def _quote(value: str) -> str:
+    """Formats a Python string as a Godot string literal."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return f'"{escaped}"'
+
+
+def _unquote(value: str) -> str:
+    """Parses a Godot string literal; returns unquoted values unchanged."""
+    match = _STRING_RE.fullmatch(value)
+    if not match:
+        return value
+    return re.sub(
+        r"\\(.)",
+        lambda m: _ESCAPES.get(m.group(1), m.group(1)),
+        match.group(1),
+        flags=re.DOTALL,
+    )
+
+
+def _packed(values: list[str]) -> str:
+    return f"PackedStringArray({', '.join(_quote(v) for v in values)})"
+
+
+def _packed_strings(value: str) -> list[str]:
+    return [_unquote(m.group(0)) for m in _STRING_RE.finditer(value)]
+
+
+def _is_unterminated(value: str) -> bool:
+    """True if `value` opens a string literal that has not been closed yet."""
+    return '"' in _STRING_RE.sub("", value)
 
 
 class ProjectMetadata(TypedDict, total=False):
@@ -97,39 +133,39 @@ def read(project_path: Path) -> ProjectMetadata:
     tags = None
     in_application_section = False
 
-    with open(project_path, encoding="utf-8") as f:
-        for raw_line in f:
-            line = raw_line.strip()
+    lines = iter(project_path.read_text(encoding="utf-8").splitlines())
+    for raw_line in lines:
+        line = raw_line.strip()
 
-            if not line or line.startswith(";"):
-                continue
+        if not line or line.startswith(";"):
+            continue
 
-            if line.startswith("["):
-                in_application_section = line == "[application]"
-                continue
+        if line.startswith("["):
+            in_application_section = line == "[application]"
+            continue
 
-            if not in_application_section:
-                continue
+        key, _, value = line.partition("=")
+        while _is_unterminated(value) and (next_line := next(lines, None)) is not None:
+            value += "\n" + next_line
 
-            if line.startswith("config/name="):
-                name = line.split("=", 1)[1].strip().strip('"')
-            elif line.startswith("config/version="):
-                version = line.split("=", 1)[1].strip().strip('"')
-            elif line.startswith("config/description="):
-                description = line.split("=", 1)[1].strip().strip('"')
-            elif line.startswith("config/icon="):
-                icon_res_path = line.split("=", 1)[1].strip().strip('"')
-            elif line.startswith("config/features="):
-                match = re.search(r'PackedStringArray\("([^"]+)"\)', line)
-                if match:
-                    compatibility_features = match.group(1)
-            elif line.startswith("config/tags="):
-                tags_match = re.search(r"PackedStringArray\((.*?)\)", line)
-                tags = (
-                    [tag.strip().strip('"') for tag in tags_match.group(1).split(",")]
-                    if tags_match
-                    else None
-                )
+        if not in_application_section:
+            continue
+
+        key, value = key.strip(), value.strip()
+        if key == "config/name":
+            name = _unquote(value)
+        elif key == "config/version":
+            version = _unquote(value)
+        elif key == "config/description":
+            description = _unquote(value)
+        elif key == "config/icon":
+            icon_res_path = _unquote(value)
+        elif key == "config/features":
+            match = re.search(r'PackedStringArray\("([^"]+)"\)', value)
+            if match:
+                compatibility_features = match.group(1)
+        elif key == "config/tags":
+            tags = _packed_strings(value) or None
 
     data: ProjectMetadata = {
         "name": name,
@@ -184,10 +220,14 @@ def create(
         tags (Optional[list[str]]): Optional list of tags (requires Godot >= 4.0).
         git_init (bool): Whether to initialize a Git repository.
 
-    Returns:
-        None
+    Raises:
+        FileExistsError: If `project_dir` already contains a project.godot file.
     """
     logger.info(f"Attempting to create new Godot project at: {project_dir}")
+    project_file = project_dir / "project.godot"
+    if project_file.exists():
+        raise FileExistsError(f"Project file already exists: {project_file}")
+
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "addons").mkdir(exist_ok=True)
 
@@ -196,24 +236,22 @@ def create(
         icon_filename = f"icon{icon_path.suffix}"
         shutil.copy(icon_path, project_dir / icon_filename)
 
-    project_file = project_dir / "project.godot"
-    with open(project_file, "w", encoding="utf-8") as f:
+    with open(project_file, "x", encoding="utf-8") as f:
         f.write(f"{GODOT_FILE_HEADER}\n\n")
         f.write("[application]\n\n")
-        f.write(f'config/name="{name}"\n')
+        f.write(f"config/name={_quote(name)}\n")
         f.write('config/version="0.1.0"\n')
-        f.write(f'config/description="{description}"\n')
+        f.write(f"config/description={_quote(description)}\n")
 
         if engine_version and engine_version.major >= 4:
             f.write(
                 f'config/features=PackedStringArray("{engine_version.major_minor}")\n'
             )
             if tags:
-                tag_array = ",".join(f'"{tag}"' for tag in tags)
-                f.write(f"config/tags=PackedStringArray({tag_array})\n")
+                f.write(f"config/tags={_packed(tags)}\n")
 
         if icon_filename:
-            f.write(f'config/icon="res://{icon_filename}"\n')
+            f.write(f"config/icon={_quote(f'res://{icon_filename}')}\n")
 
         f.write("\n")
 
@@ -250,17 +288,16 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
     properties: dict[str, str] = {}
 
     if "name" in changed:
-        properties["config/name"] = f'"{metadata["name"]}"'
+        properties["config/name"] = _quote(metadata["name"])
 
     if "description" in changed:
-        properties["config/description"] = f'"{metadata["description"]}"'
+        properties["config/description"] = _quote(metadata["description"])
 
     if "version" in changed:
-        properties["config/version"] = f'"{metadata["version"]}"'
+        properties["config/version"] = _quote(metadata["version"] or "")
 
     if "tags" in changed:
-        tag_array = ",".join(f'"{tag}"' for tag in metadata["tags"] or [])
-        properties["config/tags"] = f"PackedStringArray({tag_array})"
+        properties["config/tags"] = _packed(metadata["tags"] or [])
 
     if "compatibility_version" in changed:
         val = metadata["compatibility_version"]
@@ -319,20 +356,31 @@ def write_properties(
         updated_lines: list[str] = []
         is_inside_target_section = False
 
-        for line in lines:
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            i += 1
             stripped_line = line.strip()
 
             if stripped_line.startswith("[") and stripped_line.endswith("]"):
                 if is_inside_target_section and pending:
                     insert_pending(updated_lines)
                 is_inside_target_section = stripped_line == target_section_header
-            elif is_inside_target_section and "=" in stripped_line:
-                key = stripped_line.split("=", 1)[0].strip()
-                if key in pending:
-                    updated_lines.append(f"{key}={pending.pop(key)}\n")
-                    continue
+                updated_lines.append(line)
+                continue
 
-            updated_lines.append(line)
+            block = [line]
+            key, sep, value = stripped_line.partition("=")
+            while sep and _is_unterminated(value) and i < len(lines):
+                value += lines[i]
+                block.append(lines[i])
+                i += 1
+
+            key = key.strip()
+            if is_inside_target_section and sep and key in pending:
+                updated_lines.append(f"{key}={pending.pop(key)}\n")
+            else:
+                updated_lines.extend(block)
 
         if pending:
             if not is_inside_target_section:
@@ -400,5 +448,5 @@ def set_project_icon(project_path: Path, icon_path: Path):
     shutil.copy2(icon_path, destination_icon_path)
 
     write_properties(
-        project_path, {"config/icon": f'"res://{destination_icon_path.name}"'}
+        project_path, {"config/icon": _quote(f"res://{destination_icon_path.name}")}
     )
