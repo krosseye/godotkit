@@ -60,8 +60,7 @@ class ProjectMetadata(TypedDict, total=False):
         dir_path (Path): Absolute path to the project directory.
         icon_path (Optional[Path]): Absolute path to the icon file.
         engine_version (Optional[GodotVersion]): Full engine version string.
-        engine_version_hint (Optional[float]): Major.minor version.
-        compatibility_version (Optional[float]): Minimum compatible Godot version.
+        compatibility_version (Optional[GodotVersion]): Minimum compatible Godot version.
     """
 
     name: str
@@ -72,8 +71,7 @@ class ProjectMetadata(TypedDict, total=False):
     dir_path: Path
     icon_path: Path | None
     engine_version: GodotVersion | None
-    engine_version_hint: float | None
-    compatibility_version: float | None
+    compatibility_version: GodotVersion | None
 
 
 def read(project_path: Path) -> ProjectMetadata:
@@ -158,12 +156,10 @@ def read(project_path: Path) -> ProjectMetadata:
     if version_file_path.exists():
         with open(version_file_path, "r", encoding="utf-8") as f:
             version_str = f.read().strip()
-            engine_version = GodotVersion.parse(version_str)
-            data["engine_version"] = engine_version
-            data["engine_version_hint"] = engine_version.major_minor
+            data["engine_version"] = GodotVersion.parse(version_str)
 
     if compatibility_features:
-        data["compatibility_version"] = float(compatibility_features)
+        data["compatibility_version"] = GodotVersion.parse(compatibility_features)
 
     return data
 
@@ -208,13 +204,13 @@ def create(
         f.write('config/version="0.1.0"\n')
         f.write(f'config/description="{description}"\n')
 
-        if engine_version:
-            major_minor = engine_version.major_minor
-            if major_minor >= 4.0:
-                f.write(f'config/features=PackedStringArray("{major_minor}")\n')
-                if tags:
-                    tag_array = ",".join(f'"{tag}"' for tag in tags)
-                    f.write(f"config/tags=PackedStringArray({tag_array})\n")
+        if engine_version and engine_version.major >= 4:
+            f.write(
+                f'config/features=PackedStringArray("{engine_version.major_minor}")\n'
+            )
+            if tags:
+                tag_array = ",".join(f'"{tag}"' for tag in tags)
+                f.write(f"config/tags=PackedStringArray({tag_array})\n")
 
         if icon_filename:
             f.write(f'config/icon="res://{icon_filename}"\n')
@@ -268,9 +264,8 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
 
     if "compatibility_version" in changed:
         val = metadata["compatibility_version"]
-        if isinstance(val, GodotVersion):
-            val = val.major_minor
-        properties["config/features"] = f'PackedStringArray("{val}")'
+        assert val is not None
+        properties["config/features"] = f'PackedStringArray("{val.major_minor}")'
 
     if properties:
         write_properties(project_path, properties)

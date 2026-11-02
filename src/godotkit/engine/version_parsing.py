@@ -266,6 +266,8 @@ class GodotVersion:
         return self.csharp_enabled and self.major >= 4
 
     @property
-    def major_minor(self) -> float:
-        """Returns the major and minor version numbers combined as a float"""
-        return float(f"{self.major}.{self.minor}")
+    def major_minor(self) -> "GodotVersion":
+        """
+        Returns the stable, standard major.minor version (e.g. 4.10 for 4.10.2-rc1 (.NET)).
+        """
+        return GodotVersion(self.major, self.minor)

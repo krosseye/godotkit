@@ -126,21 +126,14 @@ class GodotProject:
         self._update(engine_version=value)
 
     @property
-    def engine_version_hint(self) -> float | None:
-        """
-        Returns the major.minor version of the engine associated with the project.
-        """
-        return self.metadata.get("engine_version_hint")
-
-    @property
-    def compatibility_version(self) -> float | None:
+    def compatibility_version(self) -> GodotVersion | None:
         """
         Returns the compatibility version associated with the project.
         """
         return self.metadata.get("compatibility_version")
 
     @compatibility_version.setter
-    def compatibility_version(self, value: GodotVersion | float) -> None:
+    def compatibility_version(self, value: GodotVersion) -> None:
         """
         Sets the compatibility version associated with the project.
         """

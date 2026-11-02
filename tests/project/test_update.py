@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from godotkit.engine import GodotVersion
 from godotkit.project import GodotProject
 from godotkit.project.parse import create, read, update
 
@@ -15,10 +16,18 @@ def project_file(tmp_path: Path) -> Path:
 
 class TestUpdate:
     def test_adds_missing_fields(self, project_file: Path):
-        update(project_file, {"tags": ["a", "b"], "compatibility_version": 4.3})
+        update(
+            project_file,
+            {"tags": ["a", "b"], "compatibility_version": GodotVersion(4, 3)},
+        )
         data = read(project_file)
         assert data["tags"] == ["a", "b"]
-        assert data["compatibility_version"] == 4.3
+        assert data["compatibility_version"] == GodotVersion(4, 3)
+
+    def test_compatibility_version_writes_major_minor_only(self, project_file: Path):
+        update(project_file, {"compatibility_version": GodotVersion(4, 10, 2, "rc", 1)})
+        assert 'PackedStringArray("4.10")' in project_file.read_text(encoding="utf-8")
+        assert read(project_file)["compatibility_version"] == GodotVersion(4, 10)
 
     def test_replaces_existing_field_once(self, project_file: Path):
         update(project_file, {"name": "Renamed"})

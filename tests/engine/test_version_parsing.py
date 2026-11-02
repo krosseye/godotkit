@@ -112,6 +112,13 @@ class TestComparison:
         elif v1_str != v2_str:
             assert v1 > v2
 
+    def test_major_minor_keeps_two_digit_minor(self):
+        v = GodotVersion(4, 10, 2, "rc", 1, csharp_enabled=True)
+
+        assert v.major_minor == GodotVersion(4, 10)
+        assert str(v.major_minor) == "4.10"
+        assert GodotVersion(4, 10).major_minor > GodotVersion(4, 9).major_minor
+
     def test_unknown_channels_are_distinct(self):
         a = GodotVersion(4, 0, channel="foo")
         b = GodotVersion(4, 0, channel="bar")
