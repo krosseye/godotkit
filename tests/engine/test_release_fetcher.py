@@ -203,11 +203,33 @@ class TestGodotFetcherReleaseFetching:
         assert len(releases) == 1
         assert mock_fetcher.cache[0].version == "4.1.1-stable"
 
-    def test_fetch_releases_with_max_releases_stops_early(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+    def test_fetch_releases_with_max_releases_limits_after_sorting(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA[::-1], []])
         releases = mock_fetcher.fetch_releases(stable_only=False, max_releases=1)
-        assert len(releases) == 1
-        assert releases[0].version == "4.1.1-stable"
+        assert [r.version for r in releases] == ["4.1.1-stable"]
+
+    def test_fetch_releases_cache_ignores_previous_filters(self, mock_fetcher, mocker):
+        mocker.patch(
+            "godotkit.engine.release_fetcher.detect_platform", return_value="macos"
+        )
+        mocker.patch(
+            "godotkit.engine.release_fetcher.detect_architecture", return_value="x86_64"
+        )
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        assert len(mock_fetcher.fetch_releases(stable_only=False, max_releases=1)) == 1
+        assert (
+            len(mock_fetcher.fetch_releases(stable_only=False, platform_only=True)) == 1
+        )
+
+        mock_fetcher.client.get.reset_mock()
+        releases = mock_fetcher.fetch_releases(stable_only=False)
+        mock_fetcher.client.get.assert_not_called()
+        assert [r.version for r in releases] == ["4.1.1-stable", "4.0.0-rc1"]
+
+    def test_fetch_releases_returned_list_does_not_alias_cache(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        mock_fetcher.fetch_releases(stable_only=False).clear()
+        assert len(mock_fetcher.fetch_releases(stable_only=False)) == 2
 
 
 class TestGodotFetcherDownloadURL:

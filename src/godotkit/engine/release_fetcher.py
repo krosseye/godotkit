@@ -174,16 +174,41 @@ class GodotFetcher:
 
         Args:
             stable_only: If True, fetches only the main stable branch releases.
-            max_releases: Maximum number of releases to fetch.
+            sort_by: "version" (newest version first) else newest publish date first.
+            max_releases: Maximum number of releases to return.
             platform_only: If True, filters releases to only include those with assets for the current system.
             refresh_cache: If True, clears the cache before fetching.
         Returns:
             A list of GodotRelease objects.
         """
-        if self.cache and not refresh_cache and self._stable_only_cached == stable_only:
-            logger.info("Returning cached releases.")
-            return self.cache
+        if refresh_cache or not self.cache or self._stable_only_cached != stable_only:
+            self.cache = self._fetch_all(stable_only)
+            self._stable_only_cached = stable_only
+        else:
+            logger.info("Using cached releases.")
 
+        releases = self.cache
+        if platform_only:
+            user_platform = detect_platform()
+            user_arch = detect_architecture()
+            logger.info(f"Filtering for platform: {user_platform}/{user_arch}")
+            releases = [
+                r
+                for r in releases
+                if r.get_asset(user_platform, user_arch, csharp=False)
+                or r.get_asset(user_platform, user_arch, csharp=True)
+            ]
+
+        if sort_by == "version":
+            releases = sorted(
+                releases, key=lambda r: self.version_sort_key(r.version), reverse=True
+            )
+        else:
+            releases = sorted(releases, key=lambda r: r.published_at, reverse=True)
+
+        return releases[:max_releases] if max_releases else releases
+
+    def _fetch_all(self, stable_only: bool) -> list[GodotRelease]:
         source = "stable" if stable_only else "all"
         logger.info(f"Fetching {source} releases from GitHub.")
 
@@ -191,12 +216,6 @@ class GodotFetcher:
         releases: list[GodotRelease] = []
         page = 1
         per_page = 30
-
-        user_platform = detect_platform() if platform_only else None
-        user_arch = detect_architecture() if platform_only and user_platform else None
-
-        if platform_only:
-            logger.info(f"Filtering for platform: {user_platform}/{user_arch}")
 
         while True:
             request_url = f"{url}?page={page}&per_page={per_page}"
@@ -237,27 +256,9 @@ class GodotFetcher:
                         )
                     )
 
-                godot_release = GodotRelease(
-                    version=tag, published_at=published_at, assets=assets
+                releases.append(
+                    GodotRelease(version=tag, published_at=published_at, assets=assets)
                 )
-
-                if user_platform:
-                    asset_found = godot_release.get_asset(
-                        user_platform, user_arch, csharp=False
-                    ) or godot_release.get_asset(user_platform, user_arch, csharp=True)
-                    if not asset_found:
-                        logger.debug(
-                            f"Skipping {tag}: No asset found for {user_platform}/{user_arch}"
-                        )
-                        continue
-
-                releases.append(godot_release)
-                if max_releases and len(releases) >= max_releases:
-                    logger.info(f"Reached max_releases limit of {max_releases}.")
-                    break
-
-            if max_releases and len(releases) >= max_releases:
-                break
 
             if len(data) < per_page:
                 logger.info("Finished fetching all available releases.")
@@ -265,14 +266,7 @@ class GodotFetcher:
 
             page += 1
 
-        if sort_by == "version":
-            releases.sort(key=lambda r: self.version_sort_key(r.version), reverse=True)
-        else:
-            releases.sort(key=lambda r: r.published_at, reverse=True)
-
-        logger.info(f"Successfully fetched and cached {len(releases)} releases.")
-        self.cache = releases
-        self._stable_only_cached = stable_only
+        logger.info(f"Successfully fetched {len(releases)} releases.")
         return releases
 
     def get_download_url(
