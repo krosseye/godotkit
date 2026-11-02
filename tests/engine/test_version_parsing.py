@@ -92,7 +92,7 @@ class TestComparison:
             ("4.5.1-rc2", "4.5.1-rc1", False),
             ("4.5.1-rc2", "4.5.1", True),
             ("3.6.2", "3.6.2 (Mono)", False),
-            ("3.6.2 (Mono)", "3.6.2", False),
+            ("3.6.2 (Mono)", "3.6.2", True),
             ("4.0.0", "4.0.1", True),
             ("4.0.9", "4.1.0", True),
         ],
@@ -111,6 +111,27 @@ class TestComparison:
             assert not (v1 >= v2)
         elif v1_str != v2_str:
             assert v1 > v2
+
+    def test_unknown_channels_are_distinct(self):
+        a = GodotVersion(4, 0, channel="foo")
+        b = GodotVersion(4, 0, channel="bar")
+
+        assert a != b
+        assert len({a, b}) == 2
+        assert (a < b) != (b < a)
+
+    def test_ordering_is_total_across_variants(self):
+        std = GodotVersion(4, 0)
+        net = GodotVersion(4, 0, csharp_enabled=True)
+
+        assert std != net
+        assert net < std
+        assert net <= std and not std <= net
+        assert sorted([net, std], reverse=True) == [std, net]
+
+    def test_equality_with_other_type_is_not_implemented(self):
+        assert GodotVersion(4, 0).__eq__("4.0") is NotImplemented
+        assert GodotVersion(4, 0) != "4.0"
 
     def test_equality_variants_and_channels_expected_behavior(self):
         v1 = GodotVersion.parse("4.5.1")

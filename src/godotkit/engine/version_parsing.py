@@ -107,15 +107,15 @@ class GodotVersion:
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, GodotVersion):
             return NotImplemented
-        return self._ordering_key() < other._ordering_key()
+        return self._key() < other._key()
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, GodotVersion):
-            return False
-        return self._equality_key() == other._equality_key()
+            return NotImplemented
+        return self._key() == other._key()
 
     def __hash__(self):
-        return hash(self._equality_key())
+        return hash(self._key())
 
     @classmethod
     def parse(cls, version_string: str) -> "GodotVersion":
@@ -214,27 +214,22 @@ class GodotVersion:
 
         return cls(major, minor, patch, channel, channel_num, csharp_enabled)
 
-    def _ordering_key(self) -> tuple[int, int, int, int, int]:
-        """Returns a tuple suitable for ordering (ignores variant)."""
-        channel_rank = RELEASE_CHANNEL_RANKING.get(self.channel, -1)
-        return (
-            self.major,
-            self.minor,
-            self.patch,
-            channel_rank,
-            self.channel_num,
-        )
+    def _key(self) -> tuple[int, int, int, int, str, int, bool]:
+        """
+        Returns a tuple suitable for ordering, equality and hashing.
 
-    def _equality_key(self) -> tuple[int, int, int, int, int, str]:
-        """Returns a tuple suitable for strict equality checks (includes variant)."""
-        channel_rank = RELEASE_CHANNEL_RANKING.get(self.channel, -1)
+        Unknown channels rank lowest and tie-break by name. The C# variant is
+        a deterministic tie-break, not "older": it sorts below the standard
+        build so newest-first lists (reverse=True) show standard first.
+        """
         return (
             self.major,
             self.minor,
             self.patch,
-            channel_rank,
+            RELEASE_CHANNEL_RANKING.get(self.channel, -1),
+            self.channel,
             self.channel_num,
-            self.variant,
+            self.is_standard,
         )
 
     @property
