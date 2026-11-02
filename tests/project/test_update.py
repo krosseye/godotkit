@@ -29,6 +29,18 @@ class TestUpdate:
         assert 'PackedStringArray("4.10")' in project_file.read_text(encoding="utf-8")
         assert read(project_file)["compatibility_version"] == GodotVersion(4, 10)
 
+    def test_compatibility_version_keeps_other_features(self, tmp_path: Path):
+        path = tmp_path / "project.godot"
+        path.write_text(
+            '[application]\n\nconfig/features=PackedStringArray("4.3", "Forward Plus", "C#")\n',
+            "utf-8",
+        )
+        update(path, {"compatibility_version": GodotVersion(4, 4)})
+        assert (
+            'config/features=PackedStringArray("4.4", "Forward Plus", "C#")'
+            in path.read_text(encoding="utf-8")
+        )
+
     def test_replaces_existing_field_once(self, project_file: Path):
         update(project_file, {"name": "Renamed"})
         text = project_file.read_text(encoding="utf-8")

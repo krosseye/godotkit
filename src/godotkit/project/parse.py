@@ -78,6 +78,45 @@ def _packed_strings(value: str) -> list[str]:
     return [_unquote(m.group(0)) for m in _STRING_RE.finditer(value)]
 
 
+def _read_section(project_path: Path, section: str = "application") -> dict[str, str]:
+    """Returns the raw (still quoted) values of one section, keyed by property."""
+    header = f"[{section}]"
+    values: dict[str, str] = {}
+    in_section = False
+
+    lines = iter(project_path.read_text(encoding="utf-8").splitlines())
+    for raw_line in lines:
+        line = raw_line.strip()
+
+        if not line or line.startswith(";"):
+            continue
+
+        if line.startswith("["):
+            in_section = line == header
+            continue
+
+        key, _, value = line.partition("=")
+        while _is_unterminated(value) and (next_line := next(lines, None)) is not None:
+            value += "\n" + next_line
+
+        if in_section:
+            values[key.strip()] = value.strip()
+
+    return values
+
+
+def _parse_version(feature: str) -> GodotVersion | None:
+    try:
+        return GodotVersion.parse(feature)
+    except ValueError:
+        return None
+
+
+def _features_version(features: list[str]) -> GodotVersion | None:
+    """The version entry of config/features, e.g. 4.3 in ("4.3", "Forward Plus")."""
+    return next((v for f in features if (v := _parse_version(f))), None)
+
+
 def _is_unterminated(value: str) -> bool:
     """True if `value` opens a string literal that has not been closed yet."""
     return '"' in _STRING_RE.sub("", value)
@@ -125,51 +164,25 @@ def read(project_path: Path) -> ProjectMetadata:
         raise FileNotFoundError(f"Project file not found: {project_path}")
 
     project_dir = project_path.parent
-    name = "Unnamed Project"
-    description = "No description provided."
-    version = None
-    icon_res_path = None
-    compatibility_features = None
-    tags = None
-    in_application_section = False
+    values = _read_section(project_path)
 
-    lines = iter(project_path.read_text(encoding="utf-8").splitlines())
-    for raw_line in lines:
-        line = raw_line.strip()
+    def text(key: str) -> str | None:
+        return _unquote(values[key]) if key in values else None
 
-        if not line or line.startswith(";"):
-            continue
-
-        if line.startswith("["):
-            in_application_section = line == "[application]"
-            continue
-
-        key, _, value = line.partition("=")
-        while _is_unterminated(value) and (next_line := next(lines, None)) is not None:
-            value += "\n" + next_line
-
-        if not in_application_section:
-            continue
-
-        key, value = key.strip(), value.strip()
-        if key == "config/name":
-            name = _unquote(value)
-        elif key == "config/version":
-            version = _unquote(value)
-        elif key == "config/description":
-            description = _unquote(value)
-        elif key == "config/icon":
-            icon_res_path = _unquote(value)
-        elif key == "config/features":
-            match = re.search(r'PackedStringArray\("([^"]+)"\)', value)
-            if match:
-                compatibility_features = match.group(1)
-        elif key == "config/tags":
-            tags = _packed_strings(value) or None
+    name = text("config/name")
+    description = text("config/description")
+    version = text("config/version")
+    icon_res_path = text("config/icon")
+    tags = _packed_strings(values.get("config/tags", "")) or None
+    compatibility_version = _features_version(
+        _packed_strings(values.get("config/features", ""))
+    )
 
     data: ProjectMetadata = {
-        "name": name,
-        "description": description,
+        "name": name if name is not None else "Unnamed Project",
+        "description": description
+        if description is not None
+        else "No description provided.",
         "file_path": project_path.resolve(),
         "dir_path": project_dir.resolve(),
     }
@@ -194,8 +207,8 @@ def read(project_path: Path) -> ProjectMetadata:
             version_str = f.read().strip()
             data["engine_version"] = GodotVersion.parse(version_str)
 
-    if compatibility_features:
-        data["compatibility_version"] = GodotVersion.parse(compatibility_features)
+    if compatibility_version:
+        data["compatibility_version"] = compatibility_version
 
     return data
 
@@ -302,7 +315,11 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
     if "compatibility_version" in changed:
         val = metadata["compatibility_version"]
         assert val is not None
-        properties["config/features"] = f'PackedStringArray("{val.major_minor}")'
+        existing = _packed_strings(
+            _read_section(project_path).get("config/features", "")
+        )
+        others = [f for f in existing if _parse_version(f) is None]
+        properties["config/features"] = _packed([str(val.major_minor), *others])
 
     if properties:
         write_properties(project_path, properties)
@@ -336,7 +353,6 @@ def write_properties(
         raise FileNotFoundError(f"Project file not found: {project_path}")
 
     def insert_pending(lines: list[str]) -> None:
-        # Insert before trailing blank lines so the new keys stay inside the section.
         i = len(lines)
         while i and not lines[i - 1].strip():
             i -= 1
