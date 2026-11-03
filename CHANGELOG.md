@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v0.6.1 (2026-11-03)
+
+### Bug Fixes
+
+- Apply release filters after caching
+  ([`cf57a8f`](https://github.com/krosseye/godotkit/commit/cf57a8fa1c45113229d52493e27dbbe861057e40))
+
+- Keep existing repo until overwrite clone succeeds
+  ([`41e37c4`](https://github.com/krosseye/godotkit/commit/41e37c4311665e306f5ed79080f5a6d0d9c763ff))
+
+- Make GodotVersion equality and ordering consistent
+  ([`142275b`](https://github.com/krosseye/godotkit/commit/142275bf7286d29208aac8d9b5cdedbe40160d1c))
+
+- Pass paths to file manager without shell quoting
+  ([`2fb20be`](https://github.com/krosseye/godotkit/commit/2fb20be9d779f9bd07091efddb299a03365df39c))
+
+- Preserve all config/features entries
+  ([`c0e593a`](https://github.com/krosseye/godotkit/commit/c0e593acf6c662c6deca9bcc48d3d7f2a24b882c))
+
+- Prevent overwriting or corrupting project.godot
+  ([`519c549`](https://github.com/krosseye/godotkit/commit/519c549da70642141b174290009a499e673bca53))
+
+- Return GodotVersion from major_minor instead of float
+  ([`6d5168a`](https://github.com/krosseye/godotkit/commit/6d5168a37be9207fc00e959c726d8d69d46a3adb))
+
+- Stop constants module shadowing its own __name__
+  ([`6ed3ae7`](https://github.com/krosseye/godotkit/commit/6ed3ae7966f52ed95b3fc8c584530d988d30863b))
+
+
 ## v0.6.0 (2026-10-31)
 
 ### Bug Fixes
