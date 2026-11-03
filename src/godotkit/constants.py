@@ -1,8 +1,8 @@
 import platform
 
-from godotkit import __name__, __version__
+from godotkit import __version__
 
-USER_AGENT = f"{__name__} v{__version__} (Python: v{platform.python_version()}, Platform: {platform.system()})"
+USER_AGENT = f"godotkit v{__version__} (Python: v{platform.python_version()}, Platform: {platform.system()})"
 
 GIT_CLONE_TIMEOUT = 300
 RELEASE_FETCHER_TIMEOUT = 10
