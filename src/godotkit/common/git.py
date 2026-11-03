@@ -2,6 +2,7 @@ import logging
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -101,13 +102,15 @@ def clone(
         repo_url: The URL of the Git repository to clone.
         output_dir: The directory where the repository will be cloned into.
         repo_name: Optional name for the cloned directory. Defaults to the repository's name from the URL.
-        overwrite: If True, removes the existing directory before cloning. If False and directory exists, skips.
+        overwrite: If True, replaces an existing directory once the new clone
+            has succeeded; a failed clone leaves it untouched. If False and the
+            directory exists, skips.
         depth: Optional integer for a shallow clone ('--depth').
 
     Raises:
         RuntimeError: If Git is not installed or the Git command fails.
         ValueError: If a repository name cannot be extracted from the URL.
-        RuntimeError: For specific issues during cleanup or the clone process.
+        OSError: If the existing directory cannot be swapped out (e.g. a file in it is open).
 
     Returns:
         The Path object to the newly cloned (or existing) repository directory.
@@ -123,11 +126,13 @@ def clone(
     repo_path = output_dir / final_repo_name
     logger.debug("Target repository path: %s", repo_path)
 
-    if not _handle_existing_repo(repo_path, overwrite):
+    if not repo_path.exists():
+        _execute_git_clone(repo_url, repo_path, depth)
+    elif overwrite:
+        _replace_with_clone(repo_url, repo_path, depth)
+    else:
         logger.info("Clone skipped, returning existing path: %s", repo_path)
         return repo_path
-
-    _execute_git_clone(repo_url, repo_path, depth)
 
     logger.info("Successfully cloned repository to: %s", repo_path)
     return repo_path
@@ -157,39 +162,24 @@ def _get_repo_name(repo_url: str, repo_name: str | None) -> str:
     return path_stem
 
 
-def _handle_existing_repo(repo_path: Path, overwrite: bool) -> bool:
-    if not repo_path.exists():
-        logger.debug("Target path %s does not exist, proceeding with clone.", repo_path)
-        return True
+def _replace_with_clone(repo_url: str, repo_path: Path, depth: int | None) -> None:
+    """Clones beside `repo_path`, then swaps it in; the old copy is only dropped on success."""
+    logger.warning("Directory %s exists. Replacing it with a fresh clone.", repo_path)
 
-    if not overwrite:
-        logger.info(
-            "Directory %s exists and overwrite=False. Skipping clone.", repo_path
-        )
-        return False
+    with tempfile.TemporaryDirectory(
+        dir=repo_path.parent, prefix=".godotkit-clone-", ignore_cleanup_errors=True
+    ) as tmp:
+        staged = Path(tmp) / "new"
+        backup = Path(tmp) / "old"
 
-    logger.warning(
-        "Directory %s exists. Attempting removal for overwrite...", repo_path
-    )
-    try:
-        shutil.rmtree(repo_path)
-        logger.info("Successfully removed existing directory: %s", repo_path)
-        return True
-    except PermissionError as e:
-        logger.error("Permission error removing directory %s: %s", repo_path, e)
-        raise PermissionError(
-            f"Failed to remove existing directory {repo_path} due to permission error."
-        ) from e
-    except shutil.Error as e:
-        logger.error("Shutil error removing directory %s: %s", repo_path, e)
-        raise RuntimeError(
-            f"Failed to remove existing directory {repo_path}: shutil error."
-        ) from e
-    except OSError as e:
-        logger.error("Unexpected error during removal of %s: %s", repo_path, e)
-        raise RuntimeError(
-            f"Unexpected error during removal of {repo_path}: {e}"
-        ) from e
+        _execute_git_clone(repo_url, staged, depth)
+
+        repo_path.rename(backup)
+        try:
+            staged.rename(repo_path)
+        except OSError:
+            backup.rename(repo_path)
+            raise
 
 
 def _execute_git_clone(repo_url: str, repo_path: Path, depth: int | None) -> None:
