@@ -1,4 +1,5 @@
 import logging
+import os
 import platform
 import shutil
 import tempfile
@@ -15,6 +16,20 @@ from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
 from .exceptions import DownloadError, ExtractError
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_with_modes(zip_ref: zipfile.ZipFile, dest: Path) -> None:
+    """Extracts all members, restoring the Unix permissions zipfile drops."""
+    for info in zip_ref.infolist():
+        path = zip_ref.extract(info, dest)
+        mode = (info.external_attr >> 16) & 0o777  # Unix permission bits
+        if (
+            os.name == "posix"
+            and info.create_system == 3  # made on Unix
+            and mode
+            and not info.is_dir()
+        ):
+            os.chmod(path, mode)
 
 
 def find_binary(dir_path: Path) -> Path | None:
@@ -45,9 +60,19 @@ def find_binary(dir_path: Path) -> Path | None:
         return None
 
     elif current_platform == "darwin":
-        raise NotImplementedError("macOS support is not implemented yet.")
+        for file in sorted(folder_path.glob("*.app/Contents/MacOS/Godot")):
+            if file.is_file():
+                return file.resolve()
+        return None
+
     elif current_platform == "linux":
-        raise NotImplementedError("Linux support is not implemented yet.")
+        # Names vary too much by version and arch, so match the ELF header.
+        for file in sorted(folder_path.glob("Godot*")):
+            if file.is_file():
+                with file.open("rb") as f:
+                    if f.read(4) == b"\x7fELF":
+                        return file.resolve()
+        return None
     else:
         raise NotImplementedError(f"Unsupported platform: {current_platform}")
 
@@ -181,11 +206,15 @@ def download_and_extract(
                     raise ValueError(f"The zip file from {url} is empty.")
 
                 temp_extract.mkdir(parents=True, exist_ok=True)
-                zip_ref.extractall(temp_extract)
+                _extract_with_modes(zip_ref, temp_extract)
 
             extracted_items = list(temp_extract.iterdir())
 
-            if len(extracted_items) == 1 and extracted_items[0].is_dir():
+            if (
+                len(extracted_items) == 1
+                and extracted_items[0].is_dir()
+                and extracted_items[0].suffix != ".app"
+            ):
                 source_dir = extracted_items[0]
             else:
                 source_dir = temp_extract
