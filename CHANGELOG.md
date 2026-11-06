@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.7.0 (2026-11-06)
+
+### Features
+
+- Support Linux and macOS engine installs
+  ([`b8f15d7`](https://github.com/krosseye/godotkit/commit/b8f15d718aa7aabacfdc2f33f2fbad01fc4d6cef))
+
+
 ## v0.6.1 (2026-11-03)
 
 ### Bug Fixes
