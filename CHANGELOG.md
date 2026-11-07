@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.7.1 (2026-11-07)
+
+### Continuous Integration
+
+- Skip build and publish when no new version is released
+  ([`ea4bdcc`](https://github.com/krosseye/godotkit/commit/ea4bdcc004820cc0f080c515c3c20cda31f2effb))
+
+### Performance Improvements
+
+- Reduce GitHub API calls when fetching releases
+  ([`6d8a684`](https://github.com/krosseye/godotkit/commit/6d8a684f96f23b2bdc95fa5ee7d44926a1b4e490))
+
+
 ## v0.7.0 (2026-11-06)
 
 ### Features
