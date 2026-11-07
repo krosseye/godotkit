@@ -44,8 +44,8 @@ MOCK_GH_RELEASE_DATA = [
 
 
 @pytest.fixture
-def mock_fetcher(mocker):
-    fetcher = GodotFetcher()
+def mock_fetcher(mocker, tmp_path):
+    fetcher = GodotFetcher(cache_dir=tmp_path)
     fetcher.client = mocker.MagicMock()
     return fetcher
 
@@ -169,7 +169,7 @@ class TestGodotFetcherReleaseFetching:
         assert len(releases) == 1
         assert releases[0].version == "4.1.1-stable"
         mock_fetcher.client.get.assert_called_with(
-            f"{GodotFetcher.STABLE_URL}?page=1&per_page=30"
+            f"{GodotFetcher.STABLE_URL}?page=1&per_page=100"
         )
 
     def test_fetch_releases_with_all_returns_all_releases(self, mock_fetcher):
@@ -177,8 +177,52 @@ class TestGodotFetcherReleaseFetching:
         releases = mock_fetcher.fetch_releases(stable_only=False)
         assert [r.version for r in releases] == ["4.1.1-stable", "4.0.0-rc1"]
         mock_fetcher.client.get.assert_called_with(
-            f"{GodotFetcher.ALL_URL}?page=1&per_page=30"
+            f"{GodotFetcher.ALL_URL}?page=1&per_page=100"
         )
+
+    def test_fetch_releases_uses_disk_cache_across_instances(self, mocker, tmp_path):
+        first = GodotFetcher(cache_dir=tmp_path)
+        first.client = mocker.MagicMock()
+        setup_mock_response(first, [MOCK_GH_RELEASE_DATA, []])
+        first.fetch_releases(stable_only=False)
+
+        second = GodotFetcher(cache_dir=tmp_path)
+        second.client = mocker.MagicMock()
+        releases = second.fetch_releases(stable_only=False)
+        second.client.get.assert_not_called()
+        assert [r.version for r in releases] == ["4.1.1-stable", "4.0.0-rc1"]
+        assert releases[0].assets[1].csharp_enabled is True
+
+    def test_fetch_releases_ignores_expired_disk_cache(self, mocker, tmp_path):
+        first = GodotFetcher(cache_dir=tmp_path)
+        first.client = mocker.MagicMock()
+        setup_mock_response(first, [MOCK_GH_RELEASE_DATA, []])
+        first.fetch_releases(stable_only=False)
+
+        mocker.patch("godotkit.engine.release_fetcher.RELEASE_CACHE_TTL", -1)
+        second = GodotFetcher(cache_dir=tmp_path)
+        second.client = mocker.MagicMock()
+        setup_mock_response(second, [MOCK_GH_RELEASE_DATA, []])
+        second.fetch_releases(stable_only=False)
+        assert second.client.get.call_count == 1
+
+    def test_fetch_releases_refresh_cache_bypasses_disk_cache(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, MOCK_GH_RELEASE_DATA])
+        mock_fetcher.fetch_releases(stable_only=False)
+        mock_fetcher.fetch_releases(stable_only=False, refresh_cache=True)
+        assert mock_fetcher.client.get.call_count == 2
+
+    def test_token_from_env_is_sent(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.setenv("GH_TOKEN", "my_token")
+        fetcher = GodotFetcher(cache_dir=tmp_path)
+        assert fetcher.client.headers["Authorization"] == "Bearer my_token"
+
+    def test_no_token_sends_no_auth_header(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        fetcher = GodotFetcher(cache_dir=tmp_path)
+        assert "Authorization" not in fetcher.client.headers
 
     def test_fetch_releases_with_platform_only_filters_by_platform(
         self, mock_fetcher, mocker

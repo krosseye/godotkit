@@ -6,5 +6,6 @@ USER_AGENT = f"godotkit v{__version__} (Python: v{platform.python_version()}, Pl
 
 GIT_CLONE_TIMEOUT = 300
 RELEASE_FETCHER_TIMEOUT = 10
+RELEASE_CACHE_TTL = 3600
 RELEASE_DOWNLOAD_TIMEOUT = 30
 RSS_FETCHER_TIMEOUT = 10

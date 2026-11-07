@@ -1,10 +1,14 @@
+import json
 import logging
+import os
 import platform
+import time
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 
-from godotkit.constants import RELEASE_FETCHER_TIMEOUT, USER_AGENT
+from godotkit.constants import RELEASE_CACHE_TTL, RELEASE_FETCHER_TIMEOUT, USER_AGENT
 
 from .version_parsing import CSHARP_URL_VARIANTS, GodotVersion
 
@@ -139,14 +143,33 @@ def detect_architecture() -> str:
     return arch
 
 
+def default_cache_dir() -> Path:
+    """Per-user cache directory for godotkit."""
+    base = os.environ.get("LOCALAPPDATA" if os.name == "nt" else "XDG_CACHE_HOME")
+    return Path(base) / "godotkit" if base else Path.home() / ".cache" / "godotkit"
+
+
 class GodotFetcher:
-    """Handles fetching and caching of Godot release information from GitHub."""
+    """Handles fetching and caching of Godot release information from GitHub.
+
+    Releases are cached on disk for `RELEASE_CACHE_TTL` seconds. If `GITHUB_TOKEN`
+    or `GH_TOKEN` is set, requests are authenticated (5000 req/hour instead of 60).
+    """
 
     STABLE_URL = "https://api.github.com/repos/godotengine/godot/releases"
     ALL_URL = "https://api.github.com/repos/godotengine/godot-builds/releases"
 
-    def __init__(self, timeout: float = RELEASE_FETCHER_TIMEOUT):
-        self.client = httpx.Client(timeout=timeout, headers={"User-Agent": USER_AGENT})
+    def __init__(
+        self,
+        timeout: float = RELEASE_FETCHER_TIMEOUT,
+        cache_dir: Path | None = None,
+    ):
+        headers = {"User-Agent": USER_AGENT}
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        self.client = httpx.Client(timeout=timeout, headers=headers)
+        self.cache_dir = cache_dir or default_cache_dir()
         self.cache: list[GodotRelease] = []
         self._stable_only_cached: bool | None = None
 
@@ -182,7 +205,7 @@ class GodotFetcher:
             A list of GodotRelease objects.
         """
         if refresh_cache or not self.cache or self._stable_only_cached != stable_only:
-            self.cache = self._fetch_all(stable_only)
+            self.cache = self._fetch_all(stable_only, use_disk_cache=not refresh_cache)
             self._stable_only_cached = stable_only
         else:
             logger.info("Using cached releases.")
@@ -208,66 +231,104 @@ class GodotFetcher:
 
         return releases[:max_releases] if max_releases else releases
 
-    def _fetch_all(self, stable_only: bool) -> list[GodotRelease]:
+    def _fetch_all(
+        self, stable_only: bool, use_disk_cache: bool = True
+    ) -> list[GodotRelease]:
         source = "stable" if stable_only else "all"
-        logger.info(f"Fetching {source} releases from GitHub.")
+        cache_file = self.cache_dir / f"releases_{source}.json"
 
-        url = self.STABLE_URL if stable_only else self.ALL_URL
+        data = self._read_disk_cache(cache_file) if use_disk_cache else None
+        if data is None:
+            data = self._download(self.STABLE_URL if stable_only else self.ALL_URL)
+            self._write_disk_cache(cache_file, data)
+        else:
+            logger.info(f"Using disk-cached {source} releases from {cache_file}.")
+
         releases: list[GodotRelease] = []
+        for release in data:
+            tag = release.get("tag_name")
+            published_at = release.get("published_at")
+
+            if not published_at or not tag:
+                logger.warning(
+                    f"Skipping malformed release: tag={tag}, published_at={published_at}"
+                )
+                continue
+
+            published_at = datetime.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ")
+
+            assets = []
+            for a in release.get("assets", []):
+                asset_name_lower = a["name"].lower()
+                csharp_enabled = any(v in asset_name_lower for v in CSHARP_URL_VARIANTS)
+                assets.append(
+                    GodotAsset(
+                        name=a["name"],
+                        url=a["browser_download_url"],
+                        size=a["size"],
+                        csharp_enabled=csharp_enabled,
+                    )
+                )
+
+            releases.append(
+                GodotRelease(version=tag, published_at=published_at, assets=assets)
+            )
+
+        logger.info(f"Successfully loaded {len(releases)} releases.")
+        return releases
+
+    def _download(self, url: str) -> list[dict]:
+        """Downloads every release page, keeping only the fields we parse."""
+        logger.info(f"Fetching releases from {url}.")
+        data: list[dict] = []
         page = 1
-        per_page = 30
+        per_page = 100
 
         while True:
             request_url = f"{url}?page={page}&per_page={per_page}"
             logger.debug(f"Requesting URL: {request_url}")
             response = self.client.get(request_url)
             response.raise_for_status()
-            data = response.json()
-            if not data:
-                logger.info(f"No more data received after page {page}.")
+            page_data = response.json()
+            if not page_data:
                 break
 
-            logger.debug(f"Processing {len(data)} releases from page {page}.")
+            data.extend(
+                {
+                    "tag_name": r.get("tag_name"),
+                    "published_at": r.get("published_at"),
+                    "assets": [
+                        {k: a[k] for k in ("name", "browser_download_url", "size")}
+                        for a in r.get("assets", [])
+                    ],
+                }
+                for r in page_data
+            )
 
-            for release in data:
-                tag = release.get("tag_name", "N/A")
-                published_at = release.get("published_at")
-
-                if not published_at or tag == "N/A":
-                    logger.warning(
-                        f"Skipping malformed release: tag={tag}, published_at={published_at}"
-                    )
-                    continue
-
-                published_at = datetime.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ")
-
-                assets = []
-                for a in release.get("assets", []):
-                    asset_name_lower = a["name"].lower()
-                    csharp_enabled = any(
-                        v in asset_name_lower for v in CSHARP_URL_VARIANTS
-                    )
-                    assets.append(
-                        GodotAsset(
-                            name=a["name"],
-                            url=a["browser_download_url"],
-                            size=a["size"],
-                            csharp_enabled=csharp_enabled,
-                        )
-                    )
-
-                releases.append(
-                    GodotRelease(version=tag, published_at=published_at, assets=assets)
-                )
-
-            if len(data) < per_page:
-                logger.info("Finished fetching all available releases.")
+            if len(page_data) < per_page:
                 break
-
             page += 1
 
-        logger.info(f"Successfully fetched {len(releases)} releases.")
-        return releases
+        return data
+
+    @staticmethod
+    def _read_disk_cache(path: Path) -> list[dict] | None:
+        try:
+            if time.time() - path.stat().st_mtime > RELEASE_CACHE_TTL:
+                return None
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    @staticmethod
+    def _write_disk_cache(path: Path, data: list[dict]) -> None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            tmp.replace(path)
+        except OSError as e:
+            logger.warning(f"Could not write release cache {path}: {e}")
 
     def get_download_url(
         self,
