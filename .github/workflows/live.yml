@@ -1,0 +1,54 @@
+name: Live Release Check
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - "src/godotkit/engine/release_fetcher.py"
+      - "src/godotkit/engine/version_parsing.py"
+      - "tests/live/**"
+      - "tests/engine/data/**"
+      - ".github/workflows/live.yml"
+  pull_request:
+    paths:
+      - "src/godotkit/engine/release_fetcher.py"
+      - "src/godotkit/engine/version_parsing.py"
+      - "tests/live/**"
+      - "tests/engine/data/**"
+      - ".github/workflows/live.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install project dependencies
+        run: uv sync --all-extras
+
+      - name: Check against live releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run pytest -m live || { sleep 60; uv run pytest -m live; }

@@ -61,3 +61,7 @@ upload_to_vcs_release = true
 [tool.mypy]
 mypy_path = "src"
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-m 'not live'"
+markers = ["live: checks against godot-builds releases"]
