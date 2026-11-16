@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -125,6 +126,40 @@ class TestDetectArchitecture:
             pytest.raises(RuntimeError, match="Unsupported CPU architecture"),
         ):
             detect_architecture()
+
+
+class TestNativeDetection:
+    """Unmocked: runs against the OS and CPU of whichever runner executes it."""
+
+    def test_detect_platform_matches_this_os(self):
+        expected = {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux")
+        assert detect_platform() == expected
+
+    def test_detect_architecture_supports_this_cpu(self):
+        assert detect_architecture() in ARCH_KEYWORDS[detect_platform()]
+
+    @pytest.mark.parametrize("csharp", [False, True], ids=["standard", "dotnet"])
+    def test_finds_a_build_for_this_machine(self, csharp: bool):
+        names = [
+            "Godot_v4.3-stable_win64.exe.zip",
+            "Godot_v4.3-stable_linux.x86_64.zip",
+            "Godot_v4.3-stable_linux.arm64.zip",
+            "Godot_v4.3-stable_macos.universal.zip",
+            "Godot_v4.3-stable_mono_win64.zip",
+            "Godot_v4.3-stable_mono_linux_x86_64.zip",
+            "Godot_v4.3-stable_mono_linux_arm64.zip",
+            "Godot_v4.3-stable_mono_macos.universal.zip",
+        ]
+        release = GodotRelease(
+            "4.3-stable",
+            datetime(2026, 11, 16),
+            [GodotAsset(n, f"https://example.com/{n}", 1, "_mono" in n) for n in names],
+        )
+
+        asset = release.get_asset(detect_platform(), detect_architecture(), csharp)
+
+        assert asset is not None
+        assert asset.csharp_enabled == csharp
 
 
 class TestGodotRelease:
