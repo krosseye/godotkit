@@ -2,6 +2,61 @@
 
 <!-- version list -->
 
+## v0.7.2 (2026-11-16)
+
+### Bug Fixes
+
+- Match release assets by exact filename
+  ([`e0865e3`](https://github.com/krosseye/godotkit/commit/e0865e3766727cd7392ee3eb9d3f9a28247909d1))
+
+- Preserve line endings when writing project files
+  ([`c396d3a`](https://github.com/krosseye/godotkit/commit/c396d3af21bd614ab31783bcbba32acb3863cd02))
+
+### Chores
+
+- **deps-dev**: Update uv-build requirement
+  ([`3c7efb1`](https://github.com/krosseye/godotkit/commit/3c7efb10afe15b03d82f3ca2b77c35da227bc409))
+
+### Continuous Integration
+
+- Bump actions/checkout from 5 to 7
+  ([`7bc8f5a`](https://github.com/krosseye/godotkit/commit/7bc8f5a639915bccdc2c95b2d31b93da9a8bd7f6))
+
+- Bump actions/deploy-pages from 4 to 5
+  ([`c9162b0`](https://github.com/krosseye/godotkit/commit/c9162b0d5a6adde17130eacb83859f2ad92f262a))
+
+- Bump actions/setup-python from 6 to 7
+  ([`b9a1ab7`](https://github.com/krosseye/godotkit/commit/b9a1ab74d589f4390f6e6ee2e0aac0fcce3f8a2d))
+
+- Bump actions/upload-pages-artifact from 4 to 5
+  ([`5173839`](https://github.com/krosseye/godotkit/commit/5173839b60e33d3bd9238f050a45b60b50bd9aef))
+
+- Bump astral-sh/setup-uv from 6 to 7
+  ([`801d902`](https://github.com/krosseye/godotkit/commit/801d9026b5cf3266ec24c3f0da002474826ea88c))
+
+- Skip tests and release on docs only pushes
+  ([`ea90c8d`](https://github.com/krosseye/godotkit/commit/ea90c8d094e651c0c88546e188900a03c6a9b18c))
+
+- Test on windows and macos
+  ([`6658bfd`](https://github.com/krosseye/godotkit/commit/6658bfdd4c3ace3018fb615df701803c4d6cbe12))
+
+- Tweak workflow timings
+  ([`8ff716c`](https://github.com/krosseye/godotkit/commit/8ff716c391b1bb1db79e01521db1508413cc9571))
+
+- Weekly check against godot-builds releases
+  ([`52693cb`](https://github.com/krosseye/godotkit/commit/52693cb878c1693da79746b22f1f3e93af6c73a8))
+
+### Documentation
+
+- Update badges in README and docs
+  ([`4eb4ed2`](https://github.com/krosseye/godotkit/commit/4eb4ed2d16fc4a6d06ff3dfcb46169377aa6bcb6))
+
+### Testing
+
+- Run platform detection and process launch on the native OS
+  ([`5f6e816`](https://github.com/krosseye/godotkit/commit/5f6e81604f6c36baebe96f31e501757abe4a8f9f))
+
+
 ## v0.7.1 (2026-11-07)
 
 ### Continuous Integration
