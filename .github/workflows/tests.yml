@@ -5,6 +5,10 @@ on:
     branches:
       # main is tested by release.yml, which calls this workflow before releasing.
       - develop
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "mkdocs.yml"
   pull_request:
     branches:
       - main
