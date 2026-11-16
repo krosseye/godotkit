@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from godotkit.engine.release_fetcher import (
-    ARCH_KEYWORDS,
+    ASSET_SUFFIXES,
     GodotAsset,
     GodotFetcher,
     GodotRelease,
@@ -19,7 +19,7 @@ MOCK_GH_RELEASE_DATA = [
         "published_at": "2023-09-15T12:00:00Z",
         "assets": [
             {
-                "name": "Godot_v4.1.1-stable_win64.exe",
+                "name": "Godot_v4.1.1-stable_win64.exe.zip",
                 "browser_download_url": "http://example.com/win64.exe",
                 "size": 100000000,
             },
@@ -31,11 +31,11 @@ MOCK_GH_RELEASE_DATA = [
         ],
     },
     {
-        "tag_name": "4.0.0-rc1",
+        "tag_name": "4.0-rc1",
         "published_at": "2023-01-01T10:00:00Z",
         "assets": [
             {
-                "name": "Godot_v4.0.0-rc1_osx.universal.zip",
+                "name": "Godot_v4.0-rc1_macos.universal.zip",
                 "browser_download_url": "http://example.com/macos_rc.zip",
                 "size": 50000000,
             },
@@ -55,7 +55,7 @@ def mock_fetcher(mocker, tmp_path):
 def godot_release_4_1_1():
     assets = [
         GodotAsset(
-            name="Godot_v4.1.1-stable_win64.exe",
+            name="Godot_v4.1.1-stable_win64.exe.zip",
             url="http://win64",
             size=100,
             csharp_enabled=False,
@@ -67,7 +67,7 @@ def godot_release_4_1_1():
             csharp_enabled=True,
         ),
         GodotAsset(
-            name="Godot_v4.1.1-stable_linux_x86_64.zip",
+            name="Godot_v4.1.1-stable_linux.x86_64.zip",
             url="http://linux_std",
             size=150,
             csharp_enabled=False,
@@ -136,7 +136,7 @@ class TestNativeDetection:
         assert detect_platform() == expected
 
     def test_detect_architecture_supports_this_cpu(self):
-        assert detect_architecture() in ARCH_KEYWORDS[detect_platform()]
+        assert (detect_platform(), detect_architecture(), False) in ASSET_SUFFIXES
 
     @pytest.mark.parametrize("csharp", [False, True], ids=["standard", "dotnet"])
     def test_finds_a_build_for_this_machine(self, csharp: bool):
@@ -165,7 +165,7 @@ class TestNativeDetection:
 class TestGodotRelease:
     def test_get_asset_with_standard_variant_returns_asset(self, godot_release_4_1_1):
         asset = godot_release_4_1_1.get_asset("windows", "x86_64", csharp=False)
-        assert asset.name == "Godot_v4.1.1-stable_win64.exe"
+        assert asset.name == "Godot_v4.1.1-stable_win64.exe.zip"
         assert asset.csharp_enabled is False
 
     def test_get_asset_with_csharp_variant_returns_asset(self, godot_release_4_1_1):
@@ -178,9 +178,7 @@ class TestGodotRelease:
         assert asset is None
 
     def test_get_asset_with_unsupported_combo_returns_none(self, godot_release_4_1_1):
-        if "arm32" not in ARCH_KEYWORDS.get("windows", {}):
-            asset = godot_release_4_1_1.get_asset("windows", "arm32", csharp=False)
-            assert asset is None
+        assert godot_release_4_1_1.get_asset("windows", "arm32") is None
 
 
 class TestGodotFetcherVersionParsing:
@@ -210,7 +208,7 @@ class TestGodotFetcherReleaseFetching:
     def test_fetch_releases_with_all_returns_all_releases(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         releases = mock_fetcher.fetch_releases(stable_only=False)
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0.0-rc1"]
+        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
         mock_fetcher.client.get.assert_called_with(
             f"{GodotFetcher.ALL_URL}?page=1&per_page=100"
         )
@@ -225,7 +223,7 @@ class TestGodotFetcherReleaseFetching:
         second.client = mocker.MagicMock()
         releases = second.fetch_releases(stable_only=False)
         second.client.get.assert_not_called()
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0.0-rc1"]
+        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
         assert releases[0].assets[1].csharp_enabled is True
 
     def test_fetch_releases_ignores_expired_disk_cache(self, mocker, tmp_path):
@@ -271,7 +269,7 @@ class TestGodotFetcherReleaseFetching:
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         releases = mock_fetcher.fetch_releases(stable_only=False, platform_only=True)
         assert len(releases) == 1
-        assert releases[0].version == "4.0.0-rc1"
+        assert releases[0].version == "4.0-rc1"
 
     def test_fetch_releases_with_cache_skips_http_calls(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [[MOCK_GH_RELEASE_DATA[0]], []])
@@ -303,7 +301,7 @@ class TestGodotFetcherReleaseFetching:
         mock_fetcher.client.get.reset_mock()
         releases = mock_fetcher.fetch_releases(stable_only=False)
         mock_fetcher.client.get.assert_not_called()
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0.0-rc1"]
+        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
     def test_fetch_releases_returned_list_does_not_alias_cache(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])

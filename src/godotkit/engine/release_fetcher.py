@@ -18,29 +18,68 @@ logger = logging.getLogger(__name__)
 PLATFORMS = ["windows", "linux", "macos"]
 ARCHS = ["x86", "x86_64", "arm32", "arm64"]
 
-ARCH_KEYWORDS = {
-    "windows": {
-        "x86": ["win32"],
-        "x86_64": ["win64"],
-        "arm64": ["windows_arm64"],
-    },
-    "linux": {
-        "x86": ["x11.32", "x11_32", "linux.x86_32", "linux_x86_32"],
-        "x86_64": ["x11.64", "x11_64", "linux.x86_64", "linux_x86_64"],
-        "arm32": ["linux.arm32", "linux_arm32"],
-        "arm64": ["linux.arm64", "linux_arm64"],
-    },
-    "macos": {
-        "x86": ["osx32", "osx.fat"],
-        "x86_64": [
-            "osx.64",
-            "osx64",
-            "osx.fat",
-            "macos.universal",
-            "osx.universal",
-        ],
-        "arm64": ["macos.universal", "osx.universal"],
-    },
+# Editor builds are published as "Godot_v{tag}_{suffix}"
+ASSET_SUFFIXES: dict[tuple[str, str, bool], tuple[str, ...]] = {
+    # --- Windows: one naming scheme ---
+    ("windows", "x86", False): ("win32.exe.zip",),
+    ("windows", "x86", True): ("mono_win32.zip",),
+    ("windows", "x86_64", False): ("win64.exe.zip",),
+    ("windows", "x86_64", True): ("mono_win64.zip",),
+    ("windows", "arm64", False): ("windows_arm64.exe.zip",),
+    ("windows", "arm64", True): ("mono_windows_arm64.zip",),
+    # --- Linux: "x11" in 3.x, renamed to "linux" during the 4.0 alphas ---
+    ("linux", "x86", False): (
+        "linux.x86_32.zip",  # 4.0-alpha15 onward
+        "linux.32.zip",  # 4.0-alpha1 to 4.0-alpha14
+        "x11.32.zip",  # 3.x
+    ),
+    ("linux", "x86", True): (
+        "mono_linux_x86_32.zip",  # 4.x
+        "mono_x11_32.zip",  # 3.x
+    ),
+    ("linux", "x86_64", False): (
+        "linux.x86_64.zip",  # 4.0-alpha15 onward
+        "linux.64.zip",  # 4.0-alpha1 to 4.0-alpha14
+        "x11.64.zip",  # 3.x
+    ),
+    ("linux", "x86_64", True): (
+        "mono_linux_x86_64.zip",  # 4.x
+        "mono_x11_64.zip",  # 3.x
+    ),
+    ("linux", "arm32", False): ("linux.arm32.zip",),
+    ("linux", "arm32", True): ("mono_linux_arm32.zip",),
+    ("linux", "arm64", False): ("linux.arm64.zip",),
+    ("linux", "arm64", True): ("mono_linux_arm64.zip",),
+    # --- macOS: "fat" (Intel 32/64-bit), then Intel-only, then universal
+    # (Intel + Apple Silicon), then one build per architecture from 4.8 ---
+    ("macos", "x86", False): ("osx.fat.zip",),
+    ("macos", "x86", True): ("mono_osx.fat.zip",),
+    ("macos", "x86_64", False): (
+        "macos.x86_64.zip",  # 4.8-beta1 onward
+        "macos.universal.zip",  # 4.0-alpha13 to 4.8-dev7
+        "osx.universal.zip",  # 3.2.4-beta2 to 4.0-alpha12
+        "osx.64.zip",  # 3.1 to 3.2.4-beta2
+        "osx.fat.zip",  # 3.0.x
+    ),
+    ("macos", "x86_64", True): (
+        "mono_macos.x86_64.zip",  # 4.8-beta1 onward
+        "mono_macos.universal.zip",  # 4.0-alpha17 to 4.8-dev7
+        "mono_osx.universal.zip",  # 3.4 to 3.x
+        "mono_osx.64.zip",  # 3.1 to 3.3.x
+        "mono_osx_64.zip",  # 3.2-beta2 only
+        "mono_osx.fat.zip",  # 3.0.3 to 3.0.6
+        "mono_osx64.zip",  # 3.0 to 3.0.2
+    ),
+    ("macos", "arm64", False): (
+        "macos.arm64.zip",  # 4.8-beta1 onward
+        "macos.universal.zip",  # 4.0-alpha13 to 4.8-dev7
+        "osx.universal.zip",  # 3.2.4-beta2 to 4.0-alpha12
+    ),
+    ("macos", "arm64", True): (
+        "mono_macos.arm64.zip",  # 4.8-beta1 onward
+        "mono_macos.universal.zip",  # 4.0-alpha17 to 4.8-dev7
+        "mono_osx.universal.zip",  # 3.4 to 3.x
+    ),
 }
 
 
@@ -81,22 +120,17 @@ class GodotRelease:
             logger.debug("Cannot find asset: architecture not provided.")
             return None
 
-        keywords = ARCH_KEYWORDS.get(platform, {}).get(arch, [])
-        if not keywords:
+        suffixes = ASSET_SUFFIXES.get((platform, arch, csharp))
+        if not suffixes:
             logger.warning(
                 f"Platform/Architecture combination not supported: {platform}/{arch}"
             )
             return None
 
-        logger.debug(
-            f"Searching for asset for version {self.version} on {platform}/{arch} (csharp={csharp}) with keywords: {keywords}"
-        )
-
-        for asset in self.assets:
-            name = asset.name.lower()
-            if csharp != asset.csharp_enabled:
-                continue
-            if any(k in name for k in keywords):
+        by_name = {asset.name: asset for asset in self.assets}
+        for suffix in suffixes:
+            asset = by_name.get(f"Godot_v{self.version}_{suffix}")
+            if asset:
                 logger.debug(f"Found matching asset: {asset.name}")
                 return asset
 
