@@ -249,7 +249,7 @@ def create(
         icon_filename = f"icon{icon_path.suffix}"
         shutil.copy(icon_path, project_dir / icon_filename)
 
-    with open(project_file, "x", encoding="utf-8") as f:
+    with open(project_file, "x", encoding="utf-8", newline="\n") as f:
         f.write(f"{GODOT_FILE_HEADER}\n\n")
         f.write("[application]\n\n")
         f.write(f"config/name={_quote(name)}\n")
@@ -269,8 +269,7 @@ def create(
         f.write("\n")
 
     if engine_version:
-        with open(project_dir / ENGINE_VERSION_FILE, "w", encoding="utf-8") as f:
-            f.write(str(engine_version))
+        set_engine_version(project_file, engine_version)
 
     if git_init:
         logger.info("Git initialization requested.")
@@ -356,16 +355,17 @@ def write_properties(
         i = len(lines)
         while i and not lines[i - 1].strip():
             i -= 1
-        lines[i:i] = [f"{key}={value}\n" for key, value in pending.items()]
+        lines[i:i] = [f"{key}={value}{nl}" for key, value in pending.items()]
         pending.clear()
 
     lock_path = project_path.with_suffix(project_path.suffix + ".lock")
     with FileLock(lock_path):
-        with open(project_path, "r", encoding="utf-8") as f:
+        with open(project_path, "r", encoding="utf-8", newline="") as f:
             lines = f.readlines()
 
+        nl = "\r\n" if lines and lines[0].endswith("\r\n") else "\n"
         if lines and not lines[-1].endswith("\n"):
-            lines[-1] += "\n"
+            lines[-1] += nl
 
         target_section_header = f"[{category}]"
         pending = dict(properties)
@@ -394,17 +394,17 @@ def write_properties(
 
             key = key.strip()
             if is_inside_target_section and sep and key in pending:
-                updated_lines.append(f"{key}={pending.pop(key)}\n")
+                updated_lines.append(f"{key}={pending.pop(key)}{nl}")
             else:
                 updated_lines.extend(block)
 
         if pending:
             if not is_inside_target_section:
-                updated_lines.append(f"\n{target_section_header}\n")
+                updated_lines.append(f"{nl}{target_section_header}{nl}")
             insert_pending(updated_lines)
 
         with tempfile.NamedTemporaryFile(
-            "w", delete=False, encoding="utf-8", dir=project_path.parent
+            "w", delete=False, encoding="utf-8", newline="", dir=project_path.parent
         ) as tf:
             temp_name = tf.name
             tf.writelines(updated_lines)
@@ -427,7 +427,7 @@ def set_engine_version(project_path: Path, engine_version: GodotVersion):
         raise FileNotFoundError(f"Project file not found: {project_path}")
 
     version_file = project_path.parent / ENGINE_VERSION_FILE
-    with open(version_file, "w", encoding="utf-8") as f:
+    with open(version_file, "w", encoding="utf-8", newline="\n") as f:
         f.write(str(engine_version))
 
 

@@ -4,7 +4,7 @@ import pytest
 
 from godotkit.engine import GodotVersion
 from godotkit.project import GodotProject
-from godotkit.project.parse import create, read, update
+from godotkit.project.parse import create, read, update, write_properties
 
 
 @pytest.fixture
@@ -59,3 +59,26 @@ class TestUpdate:
         project.name = "New"
         assert read(project_file)["tags"] == ["t"]
         assert project.name == "New"
+
+
+@pytest.mark.parametrize("nl", ["\n", "\r\n"], ids=["lf", "crlf"])
+class TestWritePropertiesLineEndings:
+    def test_replaced_and_added_keys(self, tmp_path: Path, nl: str):
+        path = tmp_path / "project.godot"
+        path.write_bytes(f'[application]{nl}config/name="A"{nl}'.encode())
+
+        write_properties(path, {"config/name": '"B"', "config/new": "1"})
+
+        assert path.read_bytes() == (
+            f'[application]{nl}config/name="B"{nl}config/new=1{nl}'.encode()
+        )
+
+    def test_added_section(self, tmp_path: Path, nl: str):
+        path = tmp_path / "project.godot"
+        path.write_bytes(f'[application]{nl}config/name="A"'.encode())
+
+        write_properties(path, {"foo": "1"}, category="rendering")
+
+        assert path.read_bytes() == (
+            f'[application]{nl}config/name="A"{nl}{nl}[rendering]{nl}foo=1{nl}'.encode()
+        )

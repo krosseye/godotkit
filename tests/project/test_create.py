@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 import pytest
@@ -46,3 +47,10 @@ class TestCreate:
     def test_skips_features_for_godot_3(self, tmp_path: Path):
         create(tmp_path, "Demo", engine_version=GodotVersion(3, 6))
         assert "compatibility_version" not in read(tmp_path / "project.godot")
+
+    @pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
+    def test_writes_lf_line_endings(self, tmp_path: Path):
+        create(tmp_path, "Demo", engine_version=GodotVersion(4, 3), git_init=True)
+
+        for name in ("project.godot", ".godot-version", ".gitignore", ".gitattributes"):
+            assert b"\r\n" not in (tmp_path / name).read_bytes(), name

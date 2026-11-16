@@ -73,9 +73,13 @@ def init_repo(
         )
         logger.info(f"Successfully initialized Git repository in {dir_path}")
         if gitignore:
-            (dir_path / ".gitignore").write_text(gitignore, encoding="utf-8")
+            (dir_path / ".gitignore").write_text(
+                gitignore, encoding="utf-8", newline="\n"
+            )
         if gitattributes:
-            (dir_path / ".gitattributes").write_text(gitattributes, encoding="utf-8")
+            (dir_path / ".gitattributes").write_text(
+                gitattributes, encoding="utf-8", newline="\n"
+            )
         return True
     except subprocess.CalledProcessError as e:
         logger.error(
