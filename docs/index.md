@@ -4,9 +4,9 @@ icon: material/information
 
 ![GodotKit](images/banner.png)
 
-![Tests Status](https://github.com/krosseye/godotkit/actions/workflows/tests.yml/badge.svg)
-![Docs Status](https://github.com/krosseye/godotkit/actions/workflows/docs.yml/badge.svg)
-![Build and Release Status](https://github.com/krosseye/godotkit/actions/workflows/release.yml/badge.svg)
+[![CI](https://github.com/krosseye/godotkit/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/krosseye/godotkit/actions/workflows/release.yml?query=branch%3Amain)
+[![Latest release](https://img.shields.io/github/v/release/krosseye/godotkit)](https://github.com/krosseye/godotkit/releases/latest)
+[![License](https://img.shields.io/github/license/krosseye/godotkit)](https://github.com/krosseye/godotkit/blob/main/LICENSE)
 
 **GodotKit** is a Python library providing functions and classes for the automation of tasks related to [Godot Engine](https://godotengine.org/) releases and projects.
 
