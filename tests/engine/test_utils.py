@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from godotkit.engine import ExtractError
-from godotkit.engine.utils import download_and_extract, find_binary
+from godotkit.engine.utils import _swap_in, download_and_extract, find_binary
 
 ELF = b"\x7fELF" + b"\0" * 12
 DOWNLOAD_URL = "https://godotengine.org/download/godot.zip"
@@ -125,6 +125,18 @@ class TestDownloadAndExtract:
         assert sorted(p.name for p in install.iterdir()) == ["Godot.exe"]
         assert (install / "Godot.exe").read_text() == "old"
         assert sorted(p.name for p in tmp_path.iterdir()) == ["install"]
+
+
+def test_swap_in_restores_target_when_rename_fails(tmp_path: Path):
+    target = tmp_path / "install"
+    target.mkdir()
+    (target / "Godot.exe").write_text("old")
+
+    with pytest.raises(FileNotFoundError):
+        _swap_in(tmp_path / "missing", target, tmp_path / "old")
+
+    assert (target / "Godot.exe").read_text() == "old"
+    assert not (tmp_path / "old").exists()
 
 
 class TestFindBinary:
