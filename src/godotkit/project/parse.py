@@ -158,9 +158,9 @@ def read(project_path: Path) -> ProjectMetadata:
     Returns:
         ProjectMetadata
     """
-    logger.debug(f"Attempting to parse Godot project file: {project_path}")
+    logger.debug("Attempting to parse Godot project file: %s", project_path)
     if not project_path.is_file():
-        logger.error(f"Project file not found: {project_path}")
+        logger.error("Project file not found: %s", project_path)
         raise FileNotFoundError(f"Project file not found: {project_path}")
 
     project_dir = project_path.parent
@@ -198,7 +198,9 @@ def read(project_path: Path) -> ProjectMetadata:
             data["icon_path"] = icon_abs_path
         else:
             logger.warning(
-                f"Configured icon path '{icon_res_path}' does not exist at {icon_abs_path}"
+                "Configured icon path '%s' does not exist at %s",
+                icon_res_path,
+                icon_abs_path,
             )
 
     version_file_path = project_dir / ENGINE_VERSION_FILE
@@ -236,7 +238,7 @@ def create(
     Raises:
         FileExistsError: If `project_dir` already contains a project.godot file.
     """
-    logger.info(f"Attempting to create new Godot project at: {project_dir}")
+    logger.info("Attempting to create new Godot project at: %s", project_dir)
     project_file = project_dir / "project.godot"
     if project_file.exists():
         raise FileExistsError(f"Project file already exists: {project_file}")
@@ -275,7 +277,7 @@ def create(
         logger.info("Git initialization requested.")
         init_repo(project_dir, GIT_IGNORE_TEMPLATE, GIT_ATTRIBUTES_TEMPLATE)
 
-    logger.info(f"Successfully created project at: {project_dir.resolve()}")
+    logger.info("Successfully created project at: %s", project_dir.resolve())
 
 
 def update(project_path: Path, metadata: ProjectMetadata) -> None:

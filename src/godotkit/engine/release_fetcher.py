@@ -124,7 +124,7 @@ class GodotRelease:
         suffixes = ASSET_SUFFIXES.get((platform, arch, csharp))
         if not suffixes:
             logger.warning(
-                f"Platform/Architecture combination not supported: {platform}/{arch}"
+                "Platform/Architecture combination not supported: %s/%s", platform, arch
             )
             return None
 
@@ -132,11 +132,15 @@ class GodotRelease:
         for suffix in suffixes:
             asset = by_name.get(f"Godot_v{self.version}_{suffix}")
             if asset:
-                logger.debug(f"Found matching asset: {asset.name}")
+                logger.debug("Found matching asset: %s", asset.name)
                 return asset
 
         logger.debug(
-            f"No matching asset found for {self.version} on {platform}/{arch} (csharp={csharp})"
+            "No matching asset found for %s on %s/%s (csharp=%s)",
+            self.version,
+            platform,
+            arch,
+            csharp,
         )
         return None
 
@@ -229,7 +233,7 @@ class GodotFetcher:
             return GodotVersion.from_tag(tag, csharp)
         except ValueError:
             logger.warning(
-                f"Malformed version tag '{tag}' encountered. Sorting to bottom."
+                "Malformed version tag '%s' encountered. Sorting to bottom.", tag
             )
             return GodotVersion(0, 0, 0, channel="dev")
 
@@ -263,7 +267,7 @@ class GodotFetcher:
         if platform_only:
             user_platform = detect_platform()
             user_arch = detect_architecture()
-            logger.info(f"Filtering for platform: {user_platform}/{user_arch}")
+            logger.info("Filtering for platform: %s/%s", user_platform, user_arch)
             releases = [
                 r
                 for r in releases
@@ -291,7 +295,7 @@ class GodotFetcher:
             data = self._download(self.STABLE_URL if stable_only else self.ALL_URL)
             self._write_disk_cache(cache_file, data)
         else:
-            logger.info(f"Using disk-cached {source} releases from {cache_file}.")
+            logger.info("Using disk-cached %s releases from %s.", source, cache_file)
 
         releases: list[GodotRelease] = []
         for release in data:
@@ -300,7 +304,9 @@ class GodotFetcher:
 
             if not published_at or not tag:
                 logger.warning(
-                    f"Skipping malformed release: tag={tag}, published_at={published_at}"
+                    "Skipping malformed release: tag=%s, published_at=%s",
+                    tag,
+                    published_at,
                 )
                 continue
 
@@ -323,19 +329,19 @@ class GodotFetcher:
                 GodotRelease(version=tag, published_at=published_at, assets=assets)
             )
 
-        logger.info(f"Successfully loaded {len(releases)} releases.")
+        logger.info("Successfully loaded %d releases.", len(releases))
         return releases
 
     def _download(self, url: str) -> list[dict]:
         """Downloads every release page, keeping only the fields we parse."""
-        logger.info(f"Fetching releases from {url}.")
+        logger.info("Fetching releases from %s.", url)
         data: list[dict] = []
         page = 1
         per_page = 100
 
         while True:
             request_url = f"{url}?page={page}&per_page={per_page}"
-            logger.debug(f"Requesting URL: {request_url}")
+            logger.debug("Requesting URL: %s", request_url)
             response = self.client.get(request_url)
             response.raise_for_status()
             page_data = response.json()
@@ -377,7 +383,7 @@ class GodotFetcher:
             tmp.write_text(json.dumps(data), encoding="utf-8")
             tmp.replace(path)
         except OSError as e:
-            logger.warning(f"Could not write release cache {path}: {e}")
+            logger.warning("Could not write release cache %s: %s", path, e)
 
     def get_download_url(
         self,
@@ -393,7 +399,11 @@ class GodotFetcher:
         arch_name = arch_name or detect_architecture()
 
         logger.info(
-            f"Attempting to find download URL for version {version} on {platform_name}/{arch_name}, mono={mono}"
+            "Attempting to find download URL for version %s on %s/%s, mono=%s",
+            version,
+            platform_name,
+            arch_name,
+            mono,
         )
 
         release = next((r for r in self.cache if r.version == version), None)
@@ -410,5 +420,5 @@ class GodotFetcher:
                 f"No download found for {platform_name} {arch_name} mono={mono} in version {version}"
             )
 
-        logger.info(f"Found asset URL for {version}: {asset.url}")
+        logger.info("Found asset URL for %s: %s", version, asset.url)
         return asset.url

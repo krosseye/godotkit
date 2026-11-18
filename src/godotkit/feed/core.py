@@ -35,7 +35,7 @@ class _BaseRSSFetcher(ABC):
         try:
             root = ET.fromstring(xml_content)
         except ET.ParseError as e:
-            logger.error(f"Failed to parse RSS feed: {e}")
+            logger.error("Failed to parse RSS feed: %s", e)
             return []
 
         for item in root.findall(".//item"):
@@ -48,7 +48,9 @@ class _BaseRSSFetcher(ABC):
                         raw_date_str, self.DATE_FORMAT
                     )
                 except ValueError as e:
-                    logger.warning(f"Failed to parse date string '{raw_date_str}': {e}")
+                    logger.warning(
+                        "Failed to parse date string '%s': %s", raw_date_str, e
+                    )
                     parsed_date = None
             else:
                 parsed_date = None
@@ -97,7 +99,7 @@ class RSSFetcher(_BaseRSSFetcher):
         Returns:
             A list of structured RSSArticle data.
         """
-        logger.info(f"Fetching feed from network: {self.FEED_URL}...")
+        logger.info("Fetching feed from network: %s...", self.FEED_URL)
         try:
             response = self.client.get(self.FEED_URL)
             response.raise_for_status()
@@ -109,10 +111,10 @@ class RSSFetcher(_BaseRSSFetcher):
             return self._parse_feed(response.content)
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP Error fetching RSS feed: {e}")
+            logger.error("HTTP Error fetching RSS feed: %s", e)
             return None
         except httpx.RequestError as e:
-            logger.error(f"Network Error fetching RSS feed: {e}")
+            logger.error("Network Error fetching RSS feed: %s", e)
             return None
         except Exception:
             logger.exception("An unexpected error occurred while fetching the RSS feed")
@@ -148,7 +150,7 @@ class AsyncRSSFetcher(_BaseRSSFetcher):
         Returns:
             A list of structured RSSArticle data.
         """
-        logger.info(f"Fetching feed from network: {self.FEED_URL}...")
+        logger.info("Fetching feed from network: %s...", self.FEED_URL)
         try:
             response = await self.client.get(self.FEED_URL)
             response.raise_for_status()
@@ -160,10 +162,10 @@ class AsyncRSSFetcher(_BaseRSSFetcher):
             return self._parse_feed(response.content)
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP Error fetching RSS feed: {e}")
+            logger.error("HTTP Error fetching RSS feed: %s", e)
             return None
         except httpx.RequestError as e:
-            logger.error(f"Network Error fetching RSS feed: {e}")
+            logger.error("Network Error fetching RSS feed: %s", e)
             return None
         except Exception:
             logger.exception("An unexpected error occurred while fetching the RSS feed")

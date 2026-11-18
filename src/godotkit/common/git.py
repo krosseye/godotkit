@@ -55,7 +55,7 @@ def init_repo(
         True if initialization was successful, False otherwise.
     """
     if not re.match(r"^[a-zA-Z0-9_\-\./]+$", initial_branch):
-        logger.error(f"Invalid branch name provided: '{initial_branch}'.")
+        logger.error("Invalid branch name provided: '%s'.", initial_branch)
         return False
 
     if not git_installed():
@@ -71,7 +71,7 @@ def init_repo(
             capture_output=True,
             text=True,
         )
-        logger.info(f"Successfully initialized Git repository in {dir_path}")
+        logger.info("Successfully initialized Git repository in %s", dir_path)
         if gitignore:
             (dir_path / ".gitignore").write_text(
                 gitignore, encoding="utf-8", newline="\n"
@@ -83,8 +83,9 @@ def init_repo(
         return True
     except subprocess.CalledProcessError as e:
         logger.error(
-            f"Failed to initialize Git repository: {e.stderr.strip()}. "
-            f"Command: {' '.join(e.cmd)}"
+            "Failed to initialize Git repository: %s. Command: %s",
+            e.stderr.strip(),
+            " ".join(e.cmd),
         )
         return False
     except Exception:
