@@ -51,9 +51,8 @@ def _names(release: GodotRelease) -> set[str]:
 
 @pytest.fixture(scope="session")
 def fetcher(tmp_path_factory):
-    fetcher = GodotFetcher(cache_dir=tmp_path_factory.mktemp("releases"))
-    yield fetcher
-    fetcher.client.close()
+    with GodotFetcher(cache_dir=tmp_path_factory.mktemp("releases")) as fetcher:
+        yield fetcher
 
 
 @pytest.fixture(scope="session")

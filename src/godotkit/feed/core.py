@@ -2,7 +2,7 @@ import datetime
 import logging
 import xml.etree.ElementTree as ET
 from abc import ABC
-from typing import ClassVar, TypedDict
+from typing import ClassVar, Self, TypedDict
 
 import httpx
 
@@ -71,6 +71,8 @@ class _BaseRSSFetcher(ABC):
 class RSSFetcher(_BaseRSSFetcher):
     """
     Handles fetching and parsing the Godot RSS feed synchronously.
+
+    Use it as a context manager, or call `close()` when done.
     """
 
     def __init__(self):
@@ -78,10 +80,14 @@ class RSSFetcher(_BaseRSSFetcher):
             timeout=RSS_FETCHER_TIMEOUT, headers={"User-Agent": USER_AGENT}
         )
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Closes the underlying HTTP client."""
         self.client.close()
 
     def fetch_feed(self) -> list[RSSArticle] | None:
@@ -116,6 +122,8 @@ class RSSFetcher(_BaseRSSFetcher):
 class AsyncRSSFetcher(_BaseRSSFetcher):
     """
     Handles fetching and parsing the Godot RSS feed asynchronously.
+
+    Use it as an async context manager, or await `aclose()` when done.
     """
 
     def __init__(self):
@@ -123,10 +131,14 @@ class AsyncRSSFetcher(_BaseRSSFetcher):
             timeout=RSS_FETCHER_TIMEOUT, headers={"User-Agent": USER_AGENT}
         )
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """Closes the underlying HTTP client."""
         await self.client.aclose()
 
     async def fetch_feed(self) -> list[RSSArticle] | None:

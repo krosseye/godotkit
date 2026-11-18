@@ -257,6 +257,16 @@ class TestGodotFetcherReleaseFetching:
         fetcher = GodotFetcher(cache_dir=tmp_path)
         assert "Authorization" not in fetcher.client.headers
 
+    def test_context_manager_closes_client(self, tmp_path):
+        with GodotFetcher(cache_dir=tmp_path) as fetcher:
+            assert not fetcher.client.is_closed
+        assert fetcher.client.is_closed
+
+    def test_close_closes_client(self, tmp_path):
+        fetcher = GodotFetcher(cache_dir=tmp_path)
+        fetcher.close()
+        assert fetcher.client.is_closed
+
     def test_fetch_releases_with_platform_only_filters_by_platform(
         self, mock_fetcher, mocker
     ):

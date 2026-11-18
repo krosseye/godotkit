@@ -183,6 +183,10 @@ class TestRSSFetcher:
             fetcher.fetch_feed()
         mock_httpx_client.close.assert_called_once()
 
+    def test_close_closes_client(self, rss_fetcher, mock_httpx_client):
+        rss_fetcher.close()
+        mock_httpx_client.close.assert_called_once()
+
 
 class TestAsyncRSSFetcher:
     @pytest.fixture
@@ -284,4 +288,11 @@ class TestAsyncRSSFetcher:
 
             await fetcher.fetch_feed()
 
+        mock_httpx_async_client.aclose.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_aclose_closes_client_async(
+        self, async_rss_fetcher, mock_httpx_async_client
+    ):
+        await async_rss_fetcher.aclose()
         mock_httpx_async_client.aclose.assert_called_once()

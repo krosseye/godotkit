@@ -5,6 +5,7 @@ import platform
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Self
 
 import httpx
 
@@ -188,6 +189,8 @@ class GodotFetcher:
 
     Releases are cached on disk for `RELEASE_CACHE_TTL` seconds. If `GITHUB_TOKEN`
     or `GH_TOKEN` is set, requests are authenticated (5000 req/hour instead of 60).
+
+    Use it as a context manager, or call `close()` when done.
     """
 
     STABLE_URL = "https://api.github.com/repos/godotengine/godot/releases"
@@ -206,6 +209,16 @@ class GodotFetcher:
         self.cache_dir = cache_dir or default_cache_dir()
         self.cache: list[GodotRelease] = []
         self._stable_only_cached: bool | None = None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Closes the underlying HTTP client."""
+        self.client.close()
 
     @staticmethod
     def version_sort_key(tag: str, csharp: bool = False) -> GodotVersion:
