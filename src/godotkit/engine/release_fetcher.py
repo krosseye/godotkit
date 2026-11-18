@@ -180,6 +180,8 @@ def detect_architecture() -> str:
 
 def default_cache_dir() -> Path:
     """Per-user cache directory for godotkit."""
+    if platform.system() == "Darwin":
+        return Path.home() / "Library" / "Caches" / "godotkit"
     base = os.environ.get("LOCALAPPDATA" if os.name == "nt" else "XDG_CACHE_HOME")
     return Path(base) / "godotkit" if base else Path.home() / ".cache" / "godotkit"
 
