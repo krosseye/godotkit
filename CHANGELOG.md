@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v0.8.0 (2026-11-18)
+
+### Bug Fixes
+
+- Extract downloads atomically
+  ([`02a4bb7`](https://github.com/krosseye/godotkit/commit/02a4bb77f9ffaa1e5358a439e8a653eb4d720359))
+
+- Report unknown version as 0.0.0
+  ([`1c59faf`](https://github.com/krosseye/godotkit/commit/1c59faf266eec4a063abdc7e461bf2f4d3b82316))
+
+- Use the platform cache dir on macOS
+  ([`978db18`](https://github.com/krosseye/godotkit/commit/978db18c9cbeb6d8f0778f2cc47eecb64884de5e))
+
+### Features
+
+- Add close() to the HTTP fetchers
+  ([`719b1c8`](https://github.com/krosseye/godotkit/commit/719b1c8b1955257f1b0145705c7cbb17fb240137))
+
+### Refactoring
+
+- Use lazy % formatting in log calls
+  ([`daf4a2c`](https://github.com/krosseye/godotkit/commit/daf4a2c4a8afa1c6d643e36a2fea54ff8c14d68a))
+
+### Testing
+
+- Cover install restore when the swap fails
+  ([`a051583`](https://github.com/krosseye/godotkit/commit/a051583475f9ef25706f248cd768c86fd0711872))
+
+
 ## v0.7.2 (2026-11-16)
 
 ### Bug Fixes
