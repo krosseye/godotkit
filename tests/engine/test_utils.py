@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from godotkit.engine import ExtractError
 from godotkit.engine.utils import download_and_extract, find_binary
 
 ELF = b"\x7fELF" + b"\0" * 12
@@ -27,11 +28,11 @@ def make_zip(path: Path, entries: dict[str, tuple[bytes, int]]) -> bytes:
 def serve(mocker):
     """Makes download_and_extract 'download' the given bytes."""
 
-    def _serve(payload: bytes) -> None:
+    def _serve(payload: bytes):
         response = mocker.MagicMock()
         response.headers = {"Content-Length": str(len(payload))}
         response.iter_bytes.return_value = [payload]
-        mocker.patch(
+        return mocker.patch(
             "godotkit.engine.utils.httpx.stream", return_value=nullcontext(response)
         )
 
@@ -80,6 +81,50 @@ class TestDownloadAndExtract:
         assert (
             tmp_path / "install" / "Godot.app" / "Contents" / "MacOS" / "Godot"
         ).is_file()
+
+    def test_overwrite_replaces_whole_install(self, tmp_path: Path, serve):
+        install = tmp_path / "install"
+        install.mkdir()
+        (install / "stale.txt").write_text("old")
+        serve(make_zip(tmp_path / "godot.zip", {"Godot.exe": (b"new", 0o755)}))
+
+        download_and_extract(DOWNLOAD_URL, install, overwrite=True)
+
+        assert sorted(p.name for p in install.iterdir()) == ["Godot.exe"]
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["godot.zip", "install"]
+
+    def test_without_overwrite_skips_non_empty_install(self, tmp_path: Path, serve):
+        install = tmp_path / "install"
+        install.mkdir()
+        (install / "Godot.exe").write_text("old")
+        stream = serve(make_zip(tmp_path / "godot.zip", {"Godot.exe": (b"new", 0)}))
+
+        download_and_extract(DOWNLOAD_URL, install)
+
+        stream.assert_not_called()
+        assert (install / "Godot.exe").read_text() == "old"
+
+    def test_fills_empty_existing_dir(self, tmp_path: Path, serve):
+        install = tmp_path / "install"
+        install.mkdir()
+        serve(make_zip(tmp_path / "godot.zip", {"Godot.exe": (b"new", 0)}))
+
+        download_and_extract(DOWNLOAD_URL, install)
+
+        assert (install / "Godot.exe").read_bytes() == b"new"
+
+    def test_failed_extract_keeps_old_install(self, tmp_path: Path, serve):
+        install = tmp_path / "install"
+        install.mkdir()
+        (install / "Godot.exe").write_text("old")
+        serve(b"not a zip")
+
+        with pytest.raises(ExtractError):
+            download_and_extract(DOWNLOAD_URL, install, overwrite=True)
+
+        assert sorted(p.name for p in install.iterdir()) == ["Godot.exe"]
+        assert (install / "Godot.exe").read_text() == "old"
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["install"]
 
 
 class TestFindBinary:

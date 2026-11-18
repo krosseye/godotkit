@@ -32,6 +32,18 @@ def _extract_with_modes(zip_ref: zipfile.ZipFile, dest: Path) -> None:
             os.chmod(path, mode)
 
 
+def _swap_in(staged: Path, target: Path, backup: Path) -> None:
+    """Replaces `target` with `staged`. The old `target` is restored on failure."""
+    if target.exists():
+        target.rename(backup)
+    try:
+        staged.rename(target)
+    except OSError:
+        if backup.exists():
+            backup.rename(target)
+        raise
+
+
 def find_binary(dir_path: Path) -> Path | None:
     """
     Finds the Godot binary in a given folder.
@@ -152,11 +164,16 @@ def download_and_extract(
         ValueError: If the zip is empty.
     """
     save_path = Path(save_path)
-    save_path.mkdir(parents=True, exist_ok=True)
+    if save_path.is_dir() and any(save_path.iterdir()) and not overwrite:
+        logger.info("Download skipped, %s is not empty.", save_path)
+        return
+    save_path.parent.mkdir(parents=True, exist_ok=True)
 
     headers = {"User-Agent": USER_AGENT}
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with tempfile.TemporaryDirectory(
+        dir=save_path.parent, prefix=".godotkit-download-", ignore_cleanup_errors=True
+    ) as tmp_dir:
         tmp_path = Path(tmp_dir)
         temp_zip = tmp_path / "download.zip"
         temp_extract = tmp_path / "extract"
@@ -219,17 +236,7 @@ def download_and_extract(
             else:
                 source_dir = temp_extract
 
-            for item in source_dir.iterdir():
-                dest = save_path / item.name
-                if dest.exists():
-                    if overwrite:
-                        if dest.is_dir():
-                            shutil.rmtree(dest)
-                        else:
-                            dest.unlink()
-                    else:
-                        continue
-                shutil.move(str(item), str(dest))
+            _swap_in(source_dir, save_path, tmp_path / "old")
 
         except zipfile.BadZipFile as e:
             raise ExtractError(
