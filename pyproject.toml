@@ -2,13 +2,20 @@
 name = "godotkit"
 version = "0.8.0"
 description = "Python utilities and classes for working with Godot engine releases and projects."
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 authors = [
   { name = "KROSSEYE", email = "30990184+KROSSEYE@users.noreply.github.com" },
 ]
 requires-python = ">=3.11"
 dependencies = ["filelock>=4.0,<5.0.0", "httpx>=0.28,<1.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/krosseye/godotkit"
+Documentation = "https://krosseye.github.io/godotkit/"
+Changelog = "https://github.com/krosseye/godotkit/blob/main/CHANGELOG.md"
+Issues = "https://github.com/krosseye/godotkit/issues"
 
 [build-system]
 requires = ["uv_build>=0.8.15,<0.14.0"]
