@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.8.1 (2026-11-19)
+
+### Bug Fixes
+
+- Raise ExtractError for an empty zip
+  ([`fca85b9`](https://github.com/krosseye/godotkit/commit/fca85b9c8abdf9186dc7a05beeab0062627cd235))
+
+### Continuous Integration
+
+- Publish releases to PyPI
+  ([`b6873ba`](https://github.com/krosseye/godotkit/commit/b6873baf59dece6249ba72af5c91eb70c7c54d41))
+
+
 ## v0.8.0 (2026-11-18)
 
 ### Bug Fixes
