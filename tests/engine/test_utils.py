@@ -126,6 +126,14 @@ class TestDownloadAndExtract:
         assert (install / "Godot.exe").read_text() == "old"
         assert sorted(p.name for p in tmp_path.iterdir()) == ["install"]
 
+    def test_empty_zip_raises_extract_error(self, tmp_path: Path, serve):
+        serve(make_zip(tmp_path / "godot.zip", {}))
+
+        with pytest.raises(ExtractError, match="empty"):
+            download_and_extract(DOWNLOAD_URL, tmp_path / "install")
+
+        assert not (tmp_path / "install").exists()
+
 
 def test_swap_in_restores_target_when_rename_fails(tmp_path: Path):
     target = tmp_path / "install"

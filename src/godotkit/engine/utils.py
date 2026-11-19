@@ -160,8 +160,7 @@ def download_and_extract(
 
     Raises:
         DownloadError: On network or write failure.
-        ExtractError: On invalid or failed zip extraction.
-        ValueError: If the zip is empty.
+        ExtractError: On an invalid or empty zip, or a failed extraction.
     """
     save_path = Path(save_path)
     if save_path.is_dir() and any(save_path.iterdir()) and not overwrite:
@@ -220,7 +219,7 @@ def download_and_extract(
             with zipfile.ZipFile(temp_zip, "r") as zip_ref:
                 members = zip_ref.namelist()
                 if not members:
-                    raise ValueError(f"The zip file from {url} is empty.")
+                    raise ExtractError(f"The zip file from {url} is empty.")
 
                 temp_extract.mkdir(parents=True, exist_ok=True)
                 _extract_with_modes(zip_ref, temp_extract)
