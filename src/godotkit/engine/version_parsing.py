@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass, replace
 from functools import total_ordering
 
 CHANNEL_STABLE: str = "stable"
@@ -39,48 +40,31 @@ URL_PARSE_REGEX = re.compile(
 
 
 @total_ordering
+@dataclass(frozen=True, slots=True, eq=False)
 class GodotVersion:
     """
-    Represents a Godot Engine version including major/minor/patch, release
-    channel, and C# support (Mono/.NET). Supports parsing from strings,
-    URLs, and comprehensive version comparisons.
+    An immutable Godot Engine version: major/minor/patch, release channel,
+    and C# support (Mono/.NET). Supports parsing from strings and URLs, and
+    version comparisons.
+
+    Args:
+        major: The major version number (e.g., 4 in 4.1.0).
+        minor: The minor version number (e.g., 1 in 4.1.0).
+        patch: The patch version number (e.g., 0 in 4.1.0).
+        channel: The release channel (e.g., 'stable', 'rc', 'dev').
+        channel_num: The sequential number for the channel (e.g., 2 in 'rc2').
+        csharp_enabled: True if this is a Mono/.NET variant build.
     """
 
-    __slots__ = (
-        "channel",
-        "channel_num",
-        "csharp_enabled",
-        "major",
-        "minor",
-        "patch",
-    )
+    major: int
+    minor: int
+    patch: int = 0
+    channel: str = CHANNEL_STABLE
+    channel_num: int = 0
+    csharp_enabled: bool = False
 
-    def __init__(
-        self,
-        major: int,
-        minor: int,
-        patch: int = 0,
-        channel: str = CHANNEL_STABLE,
-        channel_num: int = 0,
-        csharp_enabled: bool = False,
-    ):
-        """
-        Initializes a GodotVersion object.
-
-        Args:
-            major: The major version number (e.g., 4 in 4.1.0).
-            minor: The minor version number (e.g., 1 in 4.1.0).
-            patch: The patch version number (e.g., 0 in 4.1.0).
-            channel: The release channel (e.g., 'stable', 'rc', 'dev').
-            channel_num: The sequential number for the channel (e.g., 2 in 'rc2').
-            csharp_enabled: True if this is a Mono/.NET variant build.
-        """
-        self.major = major
-        self.minor = minor
-        self.patch = patch
-        self.channel = channel.lower()
-        self.channel_num = channel_num
-        self.csharp_enabled = csharp_enabled
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "channel", self.channel.lower())
 
     def __str__(self) -> str:
         if self.patch > 0:
@@ -97,12 +81,6 @@ class GodotVersion:
             base += f" ({self.variant})"
 
         return base
-
-    def __repr__(self) -> str:
-        return (
-            f"GodotVersion(major={self.major}, minor={self.minor}, patch={self.patch}, "
-            f"channel='{self.channel}', channel_num={self.channel_num}, csharp_enabled={self.csharp_enabled})"
-        )
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, GodotVersion):
@@ -169,9 +147,7 @@ class GodotVersion:
         Raises:
             ValueError: If the version string format is invalid.
         """
-        version = cls.parse(tag)
-        version.csharp_enabled = csharp_enabled
-        return version
+        return replace(cls.parse(tag), csharp_enabled=csharp_enabled)
 
     @classmethod
     def from_url(cls, url: str) -> "GodotVersion":

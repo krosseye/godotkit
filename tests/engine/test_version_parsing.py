@@ -1,3 +1,5 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from godotkit.engine.version_parsing import (
@@ -206,3 +208,20 @@ class TestFromTag:
     def test_from_tag_invalid_raises_valueerror(self):
         with pytest.raises(ValueError):
             GodotVersion.from_tag("junk-tag")
+
+
+class TestImmutable:
+    def test_assigning_a_field_raises(self):
+        version = GodotVersion(4, 3)
+        with pytest.raises(FrozenInstanceError):
+            version.csharp_enabled = True  # type: ignore[misc]
+        assert version.is_standard
+
+    def test_channel_is_normalised_and_hash_follows_equality(self):
+        version = GodotVersion(4, 4, channel="RC", channel_num=2)
+        assert version.channel == "rc"
+        assert {version: 1}[GodotVersion.parse("4.4-rc2")] == 1
+        assert repr(version) == (
+            "GodotVersion(major=4, minor=4, patch=0, channel='rc', "
+            "channel_num=2, csharp_enabled=False)"
+        )
