@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.9.0 (2026-11-20)
+
+### Bug Fixes
+
+- Use one release source with correct dates
+  ([`e64ed57`](https://github.com/krosseye/godotkit/commit/e64ed576b9aeabe9aa64aa8e271c33024593b955))
+
+### Features
+
+- Add GodotkitError base exception
+  ([`b8e20e2`](https://github.com/krosseye/godotkit/commit/b8e20e255bbf7b6f61b135a80c101b3609449df0))
+
+- Add GodotVersion.to_tag()
+  ([`d37ff5f`](https://github.com/krosseye/godotkit/commit/d37ff5f5acadb0909104ae3bcca76d4b4f795354))
+
+- Make GodotVersion immutable
+  ([`fee7400`](https://github.com/krosseye/godotkit/commit/fee740074cc3bdd1dc19a47add9357d88f048186))
+
+
 ## v0.8.1 (2026-11-19)
 
 ### Bug Fixes
