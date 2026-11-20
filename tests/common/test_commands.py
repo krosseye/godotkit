@@ -51,5 +51,5 @@ class TestLaunchDaemonCommand:
         assert Path(marker.read_text()).samefile(tmp_path)
 
     def test_invalid_working_dir_raises(self, tmp_path: Path):
-        with pytest.raises(ValueError, match="Invalid working directory"):
+        with pytest.raises(FileNotFoundError, match="Invalid working directory"):
             launch_daemon_command([sys.executable], working_dir=tmp_path / "missing")

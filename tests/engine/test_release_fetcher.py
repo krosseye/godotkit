@@ -121,10 +121,10 @@ class TestDetectArchitecture:
         mocker.patch("platform.machine", return_value=platform_machine)
         assert detect_architecture() == expected
 
-    def test_detect_architecture_unsupported_raises_runtime_error(self):
+    def test_detect_architecture_unsupported_raises_not_implemented(self):
         with (
             patch("platform.machine", return_value="ppc"),
-            pytest.raises(RuntimeError, match="Unsupported CPU architecture"),
+            pytest.raises(NotImplementedError, match="Unsupported CPU architecture"),
         ):
             detect_architecture()
 

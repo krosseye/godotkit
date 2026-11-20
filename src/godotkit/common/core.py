@@ -76,13 +76,13 @@ def run_utility_command(
     Raises:
         subprocess.CalledProcessError: If the command fails (non-zero return code).
         subprocess.TimeoutExpired: If the command times out.
-        ValueError: If the working directory is invalid.
+        FileNotFoundError: If the working directory does not exist.
     """
     cmd_str = " ".join(command)
     logger.debug("Executing utility command: %s", cmd_str)
 
     if working_dir is not None and not working_dir.is_dir():
-        raise ValueError(f"Invalid working directory: {working_dir}")
+        raise FileNotFoundError(f"Invalid working directory: {working_dir}")
 
     return subprocess.run(
         command,
@@ -105,13 +105,13 @@ def launch_daemon_command(
         working_dir (Optional[Path]): Working directory for the command.
 
     Raises:
-        ValueError: If the working directory is invalid.
+        FileNotFoundError: If the working directory does not exist.
     """
     cmd_str = " ".join(command)
     logger.debug("Launching background command: %s", cmd_str)
 
     if working_dir is not None and not working_dir.is_dir():
-        raise ValueError(f"Invalid working directory: {working_dir}")
+        raise FileNotFoundError(f"Invalid working directory: {working_dir}")
 
     if sys.platform == "win32":
         creationflags = (

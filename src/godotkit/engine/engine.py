@@ -8,6 +8,10 @@ from .version_parsing import GodotVersion
 
 class GodotEngine:
     def __init__(self, version: GodotVersion, engine_dir: Path):
+        """
+        Raises:
+            FileNotFoundError: If `engine_dir` is missing or has no Godot binary.
+        """
         self.version = version
         self.directory_path = engine_dir
 
@@ -15,7 +19,7 @@ class GodotEngine:
         if bin_file:
             self.binary_path = bin_file
         else:
-            raise ValueError("Cannot find Godot binary")
+            raise FileNotFoundError(f"Cannot find Godot binary in {engine_dir}")
 
     def start(self) -> None:
         """

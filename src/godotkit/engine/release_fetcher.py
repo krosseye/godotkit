@@ -162,7 +162,7 @@ def detect_platform() -> str:
     elif "darwin" in system:
         return "macos"
     else:
-        raise RuntimeError(f"Unsupported platform detected: {system}")
+        raise NotImplementedError(f"Unsupported platform detected: {system}")
 
 
 def detect_architecture() -> str:
@@ -181,7 +181,7 @@ def detect_architecture() -> str:
 
     arch = mapping.get(machine)
     if not arch:
-        raise RuntimeError(f"Unsupported CPU architecture detected: {machine}")
+        raise NotImplementedError(f"Unsupported CPU architecture detected: {machine}")
 
     return arch
 

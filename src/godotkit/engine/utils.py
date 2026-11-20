@@ -12,8 +12,7 @@ import httpx
 from godotkit.common import launch_daemon_command, remove_directory
 from godotkit.common import open_directory as open_dir
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
-
-from .exceptions import DownloadError, ExtractError
+from godotkit.exceptions import DownloadError, ExtractError
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +54,14 @@ def find_binary(dir_path: Path) -> Path | None:
         The path to the Godot binary if found, otherwise None.
 
     Raises:
-        ValueError: If the provided path is not a valid directory.
+        FileNotFoundError: If the provided path is not a valid directory.
         NotImplementedError: If the current platform is not supported.
     """
     folder_path = Path(dir_path)
     if not folder_path.is_dir():
-        raise ValueError(f"The provided path '{dir_path}' is not a valid directory.")
+        raise FileNotFoundError(
+            f"The provided path '{dir_path}' is not a valid directory."
+        )
 
     current_platform = platform.system().lower()
 

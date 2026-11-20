@@ -12,9 +12,9 @@ nav:
       - Getting Started: getting_started.md
   - API Reference:
       - api_reference/common.md
+      - api_reference/exceptions.md
       - Engine:
           - api_reference/engine/engine.md
-          - api_reference/engine/exceptions.md
           - api_reference/engine/release_fetcher.md
           - api_reference/engine/utils.md
           - api_reference/engine/version_parsing.md

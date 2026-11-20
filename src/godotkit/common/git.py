@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from godotkit.constants import GIT_CLONE_TIMEOUT
+from godotkit.exceptions import GitError
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ def clone(
         depth: Optional integer for a shallow clone ('--depth').
 
     Raises:
-        RuntimeError: If Git is not installed or the Git command fails.
+        GitError: If Git is not installed or the Git command fails.
         ValueError: If a repository name cannot be extracted from the URL.
         OSError: If the existing directory cannot be swapped out (e.g. a file in it is open).
 
@@ -122,7 +123,7 @@ def clone(
     """
     if not git_installed():
         logger.error("Clone aborted: Git is not installed.")
-        raise RuntimeError("Git is not installed")
+        raise GitError("Git is not installed")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -210,19 +211,17 @@ def _execute_git_clone(repo_url: str, repo_path: Path, depth: int | None) -> Non
         logger.error(
             "Git clone failed with return code %d: %s", e.returncode, e.stderr.strip()
         )
-        raise RuntimeError(
-            f"Git clone failed for '{repo_url}': {e.stderr.strip()}"
-        ) from e
+        raise GitError(f"Git clone failed for '{repo_url}': {e.stderr.strip()}") from e
     except FileNotFoundError as e:
         logger.critical("Git executable not found in PATH during execution.")
-        raise RuntimeError("Git command not found during execution") from e
+        raise GitError("Git command not found during execution") from e
     except subprocess.TimeoutExpired as e:
         logger.error(
             "Git clone timed out after %d seconds for '%s'.",
             GIT_CLONE_TIMEOUT,
             repo_url,
         )
-        raise RuntimeError(f"Git clone timed out for '{repo_url}'.") from e
+        raise GitError(f"Git clone timed out for '{repo_url}'.") from e
     except OSError as e:
         logger.critical("Unexpected exception during git clone: %s", e)
-        raise RuntimeError(f"Unexpected error during cloning: {e}") from e
+        raise GitError(f"Unexpected error during cloning: {e}") from e

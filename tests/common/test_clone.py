@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from godotkit.common import clone
+from godotkit.exceptions import GitError
 
 URL = "https://example.com/org/demo.git"
 
@@ -14,7 +15,7 @@ def fake_clone(repo_url: str, repo_path: Path, depth: int | None) -> None:
 
 def failing_clone(repo_url: str, repo_path: Path, depth: int | None) -> None:
     repo_path.mkdir()
-    raise RuntimeError("Git clone failed")
+    raise GitError("Git clone failed")
 
 
 @pytest.fixture
@@ -58,7 +59,13 @@ class TestClone:
         mocker.patch(
             "godotkit.common.git._execute_git_clone", side_effect=failing_clone
         )
-        with pytest.raises(RuntimeError):
+        with pytest.raises(GitError):
             clone(URL, tmp_path, overwrite=True)
         assert (existing_repo / "file.txt").read_text(encoding="utf-8") == "old"
         assert [p.name for p in tmp_path.iterdir()] == ["demo"]
+
+    def test_missing_git_raises_git_error(self, tmp_path: Path, mocker):
+        mocker.patch("godotkit.common.git.git_installed", return_value=False)
+        with pytest.raises(RuntimeError, match="not installed") as exc:
+            clone(URL, tmp_path)
+        assert isinstance(exc.value, GitError)

@@ -1,6 +1,7 @@
+from godotkit.exceptions import DownloadError, ExtractError
+
 from . import utils
 from .engine import GodotEngine
-from .exceptions import DownloadError, ExtractError
 from .release_fetcher import (
     GodotAsset,
     GodotFetcher,
