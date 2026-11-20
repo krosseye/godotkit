@@ -4,6 +4,7 @@ import os
 import platform
 import time
 from datetime import datetime
+from importlib.resources import files
 from pathlib import Path
 from typing import Self
 
@@ -15,6 +16,9 @@ from .version_parsing import CSHARP_URL_VARIANTS, GodotVersion
 
 logger = logging.getLogger(__name__)
 
+RELEASE_DATES: dict[str, str] = json.loads(
+    files(__package__).joinpath("release_dates.json").read_text(encoding="utf-8")
+)
 
 PLATFORMS = ["windows", "linux", "macos"]
 ARCHS = ["x86", "x86_64", "arm32", "arm64"]
@@ -199,7 +203,6 @@ class GodotFetcher:
     Use it as a context manager, or call `close()` when done.
     """
 
-    STABLE_URL = "https://api.github.com/repos/godotengine/godot/releases"
     ALL_URL = "https://api.github.com/repos/godotengine/godot-builds/releases"
 
     def __init__(
@@ -214,7 +217,6 @@ class GodotFetcher:
         self.client = httpx.Client(timeout=timeout, headers=headers)
         self.cache_dir = cache_dir or default_cache_dir()
         self.cache: list[GodotRelease] = []
-        self._stable_only_cached: bool | None = None
 
     def __enter__(self) -> Self:
         return self
@@ -249,21 +251,22 @@ class GodotFetcher:
         Fetches Godot releases from GitHub.
 
         Args:
-            stable_only: If True, fetches only the main stable branch releases.
-            sort_by: "version" (newest version first) else newest publish date first.
+            stable_only: If True, returns only stable releases.
+            sort_by: "version" (newest version first) else newest release date first.
             max_releases: Maximum number of releases to return.
             platform_only: If True, filters releases to only include those with assets for the current system.
             refresh_cache: If True, clears the cache before fetching.
         Returns:
             A list of GodotRelease objects.
         """
-        if refresh_cache or not self.cache or self._stable_only_cached != stable_only:
-            self.cache = self._fetch_all(stable_only, use_disk_cache=not refresh_cache)
-            self._stable_only_cached = stable_only
+        if refresh_cache or not self.cache:
+            self.cache = self._fetch_all(use_disk_cache=not refresh_cache)
         else:
             logger.info("Using cached releases.")
 
         releases = self.cache
+        if stable_only:
+            releases = [r for r in releases if r.version.endswith("-stable")]
         if platform_only:
             user_platform = detect_platform()
             user_arch = detect_architecture()
@@ -280,22 +283,23 @@ class GodotFetcher:
                 releases, key=lambda r: self.version_sort_key(r.version), reverse=True
             )
         else:
-            releases = sorted(releases, key=lambda r: r.published_at, reverse=True)
+            releases = sorted(
+                releases,
+                key=lambda r: (r.published_at, self.version_sort_key(r.version)),
+                reverse=True,
+            )
 
         return releases[:max_releases] if max_releases else releases
 
-    def _fetch_all(
-        self, stable_only: bool, use_disk_cache: bool = True
-    ) -> list[GodotRelease]:
-        source = "stable" if stable_only else "all"
-        cache_file = self.cache_dir / f"releases_{source}.json"
+    def _fetch_all(self, use_disk_cache: bool = True) -> list[GodotRelease]:
+        cache_file = self.cache_dir / "releases_all.json"
 
         data = self._read_disk_cache(cache_file) if use_disk_cache else None
         if data is None:
-            data = self._download(self.STABLE_URL if stable_only else self.ALL_URL)
+            data = self._download(self.ALL_URL)
             self._write_disk_cache(cache_file, data)
         else:
-            logger.info("Using disk-cached %s releases from %s.", source, cache_file)
+            logger.info("Using disk-cached releases from %s.", cache_file)
 
         releases: list[GodotRelease] = []
         for release in data:
@@ -310,7 +314,10 @@ class GodotFetcher:
                 )
                 continue
 
-            published_at = datetime.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ")
+            if tag in RELEASE_DATES:
+                published_at = datetime.fromisoformat(RELEASE_DATES[tag])
+            else:
+                published_at = datetime.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ")
 
             assets = []
             for a in release.get("assets", []):
@@ -408,10 +415,9 @@ class GodotFetcher:
 
         release = next((r for r in self.cache if r.version == version), None)
         if not release:
-            cache_type = "stable" if self._stable_only_cached else "all"
             raise ValueError(
-                f"Version {version} not found in current {cache_type} cache. "
-                "You may need to call fetch_releases(stable_only=False) to update the cache."
+                f"Version {version} not found. Call fetch_releases() first, "
+                "or with refresh_cache=True if it was released recently."
             )
 
         asset = release.get_asset(platform_name, arch_name, mono)

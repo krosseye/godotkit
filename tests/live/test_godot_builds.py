@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from godotkit.engine import GodotFetcher, GodotVersion
-from godotkit.engine.release_fetcher import ASSET_SUFFIXES, GodotRelease
+from godotkit.engine.release_fetcher import (
+    ASSET_SUFFIXES,
+    RELEASE_DATES,
+    GodotRelease,
+)
 
 pytestmark = pytest.mark.live
 
@@ -25,6 +29,7 @@ NOT_EDITOR_ONE_OFFS = {
 }
 
 FIRST_SUPPORTED_MAJOR = 3
+IMPORT_DATE = "2023-09-12"
 
 
 def _parse(tag: str) -> GodotVersion | None:
@@ -83,6 +88,13 @@ def test_every_tag_parses(all_releases, stable_releases):
     unparseable = {tag for tag in tags if _parse(tag) is None}
 
     assert sorted(unparseable - KNOWN_MALFORMED_TAGS) == []
+
+
+def test_every_imported_release_has_a_real_date(fetcher, all_releases):
+    raw = json.loads((fetcher.cache_dir / "releases_all.json").read_text("utf-8"))
+    imported = {r["tag_name"] for r in raw if r["published_at"].startswith(IMPORT_DATE)}
+
+    assert sorted(imported - RELEASE_DATES.keys()) == []
 
 
 def test_frozen_fixture_still_exists_upstream(all_releases):

@@ -6,6 +6,7 @@ import pytest
 
 from godotkit.engine.release_fetcher import (
     ASSET_SUFFIXES,
+    RELEASE_DATES,
     GodotAsset,
     GodotFetcher,
     GodotRelease,
@@ -197,13 +198,46 @@ class TestGodotFetcherReleaseFetching:
     def test_fetch_releases_with_stable_only_returns_stable_releases(
         self, mock_fetcher
     ):
-        setup_mock_response(mock_fetcher, [[MOCK_GH_RELEASE_DATA[0]], []])
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         releases = mock_fetcher.fetch_releases(stable_only=True)
-        assert len(releases) == 1
-        assert releases[0].version == "4.1.1-stable"
+        assert [r.version for r in releases] == ["4.1.1-stable"]
         mock_fetcher.client.get.assert_called_with(
-            f"{GodotFetcher.STABLE_URL}?page=1&per_page=100"
+            f"{GodotFetcher.ALL_URL}?page=1&per_page=100"
         )
+
+    def test_switching_stable_only_does_not_refetch(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        mock_fetcher.fetch_releases(stable_only=True)
+        mock_fetcher.client.get.reset_mock()
+
+        releases = mock_fetcher.fetch_releases(stable_only=False)
+
+        mock_fetcher.client.get.assert_not_called()
+        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+
+    def test_baked_date_replaces_import_date(self, mock_fetcher, mocker):
+        mocker.patch.dict(RELEASE_DATES, {"4.0-rc1": "2020-05-05"}, clear=True)
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+
+        dates = {
+            r.version: r.published_at
+            for r in mock_fetcher.fetch_releases(stable_only=False)
+        }
+
+        assert dates == {
+            "4.1.1-stable": datetime(2023, 9, 15, 12),
+            "4.0-rc1": datetime(2020, 5, 5),
+        }
+
+    def test_date_sort_breaks_ties_by_version(self, mock_fetcher, mocker):
+        mocker.patch.dict(
+            RELEASE_DATES, {"4.1.1-stable": "2023-01-01", "4.0-rc1": "2023-01-01"}
+        )
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA[::-1], []])
+
+        releases = mock_fetcher.fetch_releases(stable_only=False, sort_by="date")
+
+        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
     def test_fetch_releases_with_all_returns_all_releases(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
@@ -282,13 +316,13 @@ class TestGodotFetcherReleaseFetching:
         assert releases[0].version == "4.0-rc1"
 
     def test_fetch_releases_with_cache_skips_http_calls(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [[MOCK_GH_RELEASE_DATA[0]], []])
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         mock_fetcher.fetch_releases(stable_only=True)
         mock_fetcher.client.get.reset_mock()
         releases = mock_fetcher.fetch_releases(stable_only=True)
         mock_fetcher.client.get.assert_not_called()
         assert len(releases) == 1
-        assert mock_fetcher.cache[0].version == "4.1.1-stable"
+        assert len(mock_fetcher.cache) == 2
 
     def test_fetch_releases_with_max_releases_limits_after_sorting(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA[::-1], []])
@@ -348,3 +382,9 @@ class TestGodotFetcherDownloadURL:
             ValueError, match="No download found for linux arm64 mono=False"
         ):
             mock_fetcher.get_download_url("4.1.1-stable", "linux", "arm64", mono=False)
+
+
+def test_release_dates_ship_with_the_package():
+    assert len(RELEASE_DATES) == 224
+    assert RELEASE_DATES["3.0-stable"] == "2018-01-29"
+    assert RELEASE_DATES["3.2.4-beta1"] == "2020-10-21"
