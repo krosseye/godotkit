@@ -90,6 +90,11 @@ def test_every_tag_parses(all_releases, stable_releases):
     assert sorted(unparseable - KNOWN_MALFORMED_TAGS) == []
 
 
+def test_every_tag_round_trips(all_releases):
+    tags = {r.version for r in all_releases} - KNOWN_MALFORMED_TAGS
+    assert sorted(t for t in tags if GodotVersion.from_tag(t).to_tag() != t) == []
+
+
 def test_every_imported_release_has_a_real_date(fetcher, all_releases):
     raw = json.loads((fetcher.cache_dir / "releases_all.json").read_text("utf-8"))
     imported = {r["tag_name"] for r in raw if r["published_at"].startswith(IMPORT_DATE)}

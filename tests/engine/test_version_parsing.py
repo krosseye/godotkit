@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from godotkit.engine.release_fetcher import RELEASE_DATES
 from godotkit.engine.version_parsing import (
     CHANNEL_STABLE,
     VARIANT_DOTNET,
@@ -208,6 +209,29 @@ class TestFromTag:
     def test_from_tag_invalid_raises_valueerror(self):
         with pytest.raises(ValueError):
             GodotVersion.from_tag("junk-tag")
+
+
+class TestToTag:
+    @pytest.mark.parametrize(
+        ("version", "tag"),
+        [
+            (GodotVersion(4, 3), "4.3-stable"),
+            (GodotVersion(4, 1, 1), "4.1.1-stable"),
+            (GodotVersion(4, 4, 0, "rc", 2), "4.4-rc2"),
+            (GodotVersion(3, 2, 4, "beta", 1, csharp_enabled=True), "3.2.4-beta1"),
+            (GodotVersion(4, 3, csharp_enabled=True), "4.3-stable"),
+        ],
+    )
+    def test_to_tag(self, version, tag):
+        assert version.to_tag() == tag
+
+    def test_round_trips_every_imported_release_tag(self):
+        tags = set(RELEASE_DATES) - {"2.0.4.1-stable", "3.2-alpha0-unofficial"}
+        assert [t for t in tags if GodotVersion.from_tag(t).to_tag() != t] == []
+
+    def test_round_trip_keeps_csharp_flag(self):
+        version = GodotVersion(4, 4, 0, "dev", 7, csharp_enabled=True)
+        assert GodotVersion.from_tag(version.to_tag(), True) == version
 
 
 class TestImmutable:

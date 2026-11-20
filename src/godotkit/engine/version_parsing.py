@@ -190,6 +190,16 @@ class GodotVersion:
 
         return cls(major, minor, patch, channel, channel_num, csharp_enabled)
 
+    def to_tag(self) -> str:
+        """
+        Returns the GitHub release tag, e.g. "4.3-stable" or "4.4-rc2".
+
+        The tag is the same for the standard and C# builds, so `csharp_enabled`
+        is left out. `from_tag(v.to_tag(), v.csharp_enabled)` gives back `v`.
+        """
+        tag = str(replace(self, csharp_enabled=False))
+        return f"{tag}-{CHANNEL_STABLE}" if self.is_stable else tag
+
     def _key(self) -> tuple[int, int, int, int, str, int, bool]:
         """
         Returns a tuple suitable for ordering, equality and hashing.
