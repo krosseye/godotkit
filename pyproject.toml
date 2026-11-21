@@ -41,6 +41,7 @@ commit_parser = "conventional"
 tag_format = "v{version}"
 allow_zero_version = true
 major_on_zero = false
+build_command = "uv lock --upgrade-package godotkit && git add uv.lock"
 
 [tool.semantic_release.branches.main]
 match = "(main|master)"
