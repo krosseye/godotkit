@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -291,8 +291,7 @@ class TestGodotFetcherReleaseFetching:
         setup_mock_response(first, [MOCK_GH_RELEASE_DATA, []])
         first.fetch_releases(stable_only=False)
 
-        mocker.patch("godotkit.engine.release_fetcher.RELEASE_CACHE_TTL", -1)
-        second = GodotFetcher(cache_dir=tmp_path)
+        second = GodotFetcher(cache_dir=tmp_path, cache_ttl=-1)
         second.client = mocker.MagicMock()
         setup_mock_response(second, [MOCK_GH_RELEASE_DATA, []])
         second.fetch_releases(stable_only=False)
@@ -326,19 +325,39 @@ class TestGodotFetcherReleaseFetching:
         fetcher.close()
         assert fetcher.client.is_closed
 
-    def test_fetch_releases_with_platform_only_filters_by_platform(
-        self, mock_fetcher, mocker
-    ):
+    def test_fetched_at_is_download_time_then_cache_file_time(self, mocker, tmp_path):
+        first = GodotFetcher(cache_dir=tmp_path)
+        assert first.fetched_at is None
+        first.client = mocker.MagicMock()
+        setup_mock_response(first, [MOCK_GH_RELEASE_DATA, []])
+        before = datetime.now(UTC)
+        first.fetch_releases()
+        assert before <= first.fetched_at <= datetime.now(UTC)
+
+        second = GodotFetcher(cache_dir=tmp_path)
+        second.fetch_releases()
+        mtime = (tmp_path / "releases_all.json").stat().st_mtime
+        assert second.fetched_at == datetime.fromtimestamp(mtime, UTC)
+
+    def test_filter_by_target_counts_dotnet_only_builds(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        releases = mock_fetcher.fetch_releases(
+            stable_only=False, platform="linux", arch="x86_64"
+        )
+        assert [r.tag for r in releases] == ["4.1.1-stable"]
+
+    def test_filter_defaults_missing_half_to_this_machine(self, mock_fetcher, mocker):
         mocker.patch(
             "godotkit.engine.release_fetcher.detect_platform", return_value="macos"
         )
-        mocker.patch(
-            "godotkit.engine.release_fetcher.detect_architecture", return_value="x86_64"
-        )
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
-        releases = mock_fetcher.fetch_releases(stable_only=False, platform_only=True)
-        assert len(releases) == 1
-        assert releases[0].tag == "4.0-rc1"
+        releases = mock_fetcher.fetch_releases(stable_only=False, arch="arm64")
+        assert [r.tag for r in releases] == ["4.0-rc1"]
+
+    def test_filter_with_unknown_name_raises(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        with pytest.raises(ValueError, match="Unknown platform"):
+            mock_fetcher.fetch_releases(platform="win", arch="x86_64")
 
     def test_fetch_releases_with_cache_skips_http_calls(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
@@ -354,18 +373,13 @@ class TestGodotFetcherReleaseFetching:
         releases = mock_fetcher.fetch_releases(stable_only=False, max_releases=1)
         assert [r.tag for r in releases] == ["4.1.1-stable"]
 
-    def test_fetch_releases_cache_ignores_previous_filters(self, mock_fetcher, mocker):
-        mocker.patch(
-            "godotkit.engine.release_fetcher.detect_platform", return_value="macos"
-        )
-        mocker.patch(
-            "godotkit.engine.release_fetcher.detect_architecture", return_value="x86_64"
-        )
+    def test_fetch_releases_cache_ignores_previous_filters(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         assert len(mock_fetcher.fetch_releases(stable_only=False, max_releases=1)) == 1
-        assert (
-            len(mock_fetcher.fetch_releases(stable_only=False, platform_only=True)) == 1
+        releases = mock_fetcher.fetch_releases(
+            stable_only=False, platform="macos", arch="x86_64"
         )
+        assert len(releases) == 1
 
         mock_fetcher.client.get.reset_mock()
         releases = mock_fetcher.fetch_releases(stable_only=False)

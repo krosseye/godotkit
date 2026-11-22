@@ -4,7 +4,7 @@ import os
 import platform
 import time
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
 from typing import Self
@@ -216,8 +216,12 @@ def default_cache_dir() -> Path:
 class GodotFetcher:
     """Handles fetching and caching of Godot release information from GitHub.
 
-    Releases are cached on disk for `RELEASE_CACHE_TTL` seconds. If `GITHUB_TOKEN`
-    or `GH_TOKEN` is set, requests are authenticated (5000 req/hour instead of 60).
+    Releases are cached on disk in `cache_dir` for `cache_ttl` seconds. If
+    `GITHUB_TOKEN` or `GH_TOKEN` is set, requests are authenticated (5000
+    req/hour instead of 60).
+
+    `fetched_at` is when the cached release list was downloaded from GitHub
+    (timezone-aware UTC), or None before the first fetch.
 
     Use it as a context manager, or call `close()` when done.
     """
@@ -228,6 +232,7 @@ class GodotFetcher:
         self,
         timeout: float = RELEASE_FETCHER_TIMEOUT,
         cache_dir: Path | None = None,
+        cache_ttl: float = RELEASE_CACHE_TTL,
     ):
         headers = {"User-Agent": USER_AGENT}
         token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
@@ -235,7 +240,9 @@ class GodotFetcher:
             headers["Authorization"] = f"Bearer {token}"
         self.client = httpx.Client(timeout=timeout, headers=headers)
         self.cache_dir = cache_dir or default_cache_dir()
+        self.cache_ttl = cache_ttl
         self.cache: list[GodotRelease] = []
+        self.fetched_at: datetime | None = None
 
     def __enter__(self) -> Self:
         return self
@@ -252,7 +259,8 @@ class GodotFetcher:
         stable_only: bool = True,
         sort_by: str = "version",
         max_releases: int | None = None,
-        platform_only: bool = False,
+        platform: str | None = None,
+        arch: str | None = None,
         refresh_cache: bool = False,
     ) -> list[GodotRelease]:
         """
@@ -262,10 +270,16 @@ class GodotFetcher:
             stable_only: If True, returns only stable releases.
             sort_by: "version" (newest version first) else newest release date first.
             max_releases: Maximum number of releases to return.
-            platform_only: If True, filters releases to only include those with assets for the current system.
-            refresh_cache: If True, clears the cache before fetching.
+            platform: Keep only releases with a standard or .NET editor build
+                for this target. If only one of `platform`/`arch` is given, the
+                other defaults to this machine. Neither: no filtering.
+            arch: See `platform`.
+            refresh_cache: If True, ignores the memory and disk caches.
         Returns:
             A list of GodotRelease objects.
+
+        Raises:
+            ValueError: If `platform` or `arch` isn't a known name.
         """
         if refresh_cache or not self.cache:
             self.cache = self._fetch_all(use_disk_cache=not refresh_cache)
@@ -275,15 +289,14 @@ class GodotFetcher:
         releases = self.cache
         if stable_only:
             releases = [r for r in releases if r.version.is_stable]
-        if platform_only:
-            user_platform = detect_platform()
-            user_arch = detect_architecture()
-            logger.info("Filtering for platform: %s/%s", user_platform, user_arch)
+        if platform or arch:
+            platform = platform or detect_platform()
+            arch = arch or detect_architecture()
+            logger.info("Filtering for %s/%s.", platform, arch)
             releases = [
                 r
                 for r in releases
-                if r.get_asset(user_platform, user_arch, csharp=False)
-                or r.get_asset(user_platform, user_arch, csharp=True)
+                if r.get_asset(platform, arch) or r.get_asset(platform, arch, True)
             ]
 
         if sort_by == "version":
@@ -301,6 +314,7 @@ class GodotFetcher:
         data = self._read_disk_cache(cache_file) if use_disk_cache else None
         if data is None:
             data = self._download(self.ALL_URL)
+            self.fetched_at = datetime.now(UTC)
             self._write_disk_cache(cache_file, data)
         else:
             logger.info("Using disk-cached releases from %s.", cache_file)
@@ -379,14 +393,16 @@ class GodotFetcher:
 
         return data
 
-    @staticmethod
-    def _read_disk_cache(path: Path) -> list[dict] | None:
+    def _read_disk_cache(self, path: Path) -> list[dict] | None:
         try:
-            if time.time() - path.stat().st_mtime > RELEASE_CACHE_TTL:
+            mtime = path.stat().st_mtime
+            if time.time() - mtime > self.cache_ttl:
                 return None
-            return json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
+        self.fetched_at = datetime.fromtimestamp(mtime, UTC)
+        return data
 
     @staticmethod
     def _write_disk_cache(path: Path, data: list[dict]) -> None:
