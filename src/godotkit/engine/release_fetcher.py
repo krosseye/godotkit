@@ -14,7 +14,7 @@ import httpx
 from godotkit.constants import RELEASE_CACHE_TTL, RELEASE_FETCHER_TIMEOUT, USER_AGENT
 from godotkit.exceptions import AssetNotFoundError, ReleaseNotFoundError
 
-from .version_parsing import CSHARP_URL_VARIANTS, GodotVersion
+from .version_parsing import CSHARP_MARKER, GodotVersion
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +340,7 @@ class GodotFetcher:
             assets = []
             for a in release.get("assets", []):
                 asset_name_lower = a["name"].lower()
-                csharp_enabled = any(v in asset_name_lower for v in CSHARP_URL_VARIANTS)
+                csharp_enabled = f"_{CSHARP_MARKER}" in asset_name_lower
                 assets.append(
                     GodotAsset(
                         name=a["name"],

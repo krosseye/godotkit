@@ -22,5 +22,9 @@ class AssetNotFoundError(GodotkitError):
     """The release exists, but has no editor build for the requested target."""
 
 
+class VersionFileError(GodotkitError, ValueError):
+    """A project's `.godot-version` file holds no valid version."""
+
+
 class GitError(GodotkitError, RuntimeError):
     """A git command failed, or git is not installed."""

@@ -119,7 +119,7 @@ class TestComparison:
         v = GodotVersion(4, 10, 2, "rc", 1, csharp_enabled=True)
 
         assert v.major_minor == GodotVersion(4, 10)
-        assert str(v.major_minor) == "4.10"
+        assert str(v.major_minor) == "4.10.stable"
         assert GodotVersion(4, 10).major_minor > GodotVersion(4, 9).major_minor
 
     @pytest.mark.parametrize(
@@ -137,7 +137,19 @@ class TestComparison:
             GodotVersion(4, 0, **kwargs)
 
     @pytest.mark.parametrize(
-        "text", ["4.3-mono", "4.3-stable2", "4.4-rc0", "4.3-foo1", "٤.٣", "4.3-rc1x"]
+        "text",
+        [
+            "4.3-stable2",
+            "4.4-rc0",
+            "4.3-foo1",
+            "٤.٣",
+            "4.3-rc1x",
+            "4.3.stable.double",
+            "4.3.stable.mono.official.77dcf97d8",
+            "2.0.4.1-stable",
+            "4.3 .NET",
+            "4.3mono",
+        ],
     )
     def test_parse_rejects_ambiguous_or_lossy_input(self, text):
         with pytest.raises(ValueError):
@@ -173,16 +185,50 @@ class TestComparison:
 
 class TestStringAndProperties:
     @pytest.mark.parametrize(
-        "version_str",
+        ("version", "canonical", "display"),
         [
-            "4.6-dev1 (.NET)",
-            "3.6.2 (Mono)",
-            "4.5",
+            (GodotVersion(4, 3), "4.3.stable", "4.3"),
+            (GodotVersion(4, 3, 1), "4.3.1.stable", "4.3.1"),
+            (GodotVersion(4, 4, 0, "rc", 2), "4.4.rc2", "4.4-rc2"),
+            (GodotVersion(4, 8, 0, "beta"), "4.8.beta", "4.8-beta"),
+            (GodotVersion(3, 2, 4, "beta", 5), "3.2.4.beta5", "3.2.4-beta5"),
+            (GodotVersion(4, 3, csharp_enabled=True), "4.3.stable.mono", "4.3 (.NET)"),
+            (GodotVersion(3, 6, csharp_enabled=True), "3.6.stable.mono", "3.6 (Mono)"),
+            (
+                GodotVersion(4, 4, 0, "rc", 2, csharp_enabled=True),
+                "4.4.rc2.mono",
+                "4.4-rc2 (.NET)",
+            ),
         ],
     )
-    def test_str_representation_matches_input(self, version_str):
-        v = GodotVersion.parse(version_str)
-        assert str(v) == version_str
+    def test_canonical_and_display_forms_round_trip(self, version, canonical, display):
+        assert str(version) == canonical
+        assert version.display_name == display
+        assert GodotVersion.parse(canonical) == version
+        assert GodotVersion.parse(display) == version
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "4.3.stable.mono",
+            "4.3-stable-mono",
+            "4.3_mono",
+            "4.3+mono",
+            "4.3.0 mono",
+            "v4.3 (.NET)",
+            "4.3 (Mono)",
+            "4.3-DOTNET",
+            "  4.3.Stable.Mono\n",
+        ],
+    )
+    def test_parse_accepts_lenient_csharp_spellings(self, text):
+        assert GodotVersion.parse(text) == GodotVersion(4, 3, csharp_enabled=True)
+
+    @pytest.mark.parametrize("csharp", [False, True])
+    def test_every_release_round_trips_through_str(self, csharp):
+        tags = set(RELEASE_DATES) - {"2.0.4.1-stable", "3.2-alpha0-unofficial"}
+        versions = [GodotVersion.from_tag(t, csharp) for t in tags]
+        assert [v for v in versions if GodotVersion.parse(str(v)) != v] == []
 
     def test_is_property_flags_expected_truth_values(self):
         v_stable = GodotVersion.parse("4.5")

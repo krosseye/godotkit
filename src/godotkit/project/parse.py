@@ -10,6 +10,7 @@ from filelock import FileLock
 
 from ..common.git import init_repo
 from ..engine.version_parsing import GodotVersion
+from ..exceptions import VersionFileError
 
 ENGINE_VERSION_FILE = ".godot-version"
 
@@ -114,7 +115,12 @@ def _parse_version(feature: str) -> GodotVersion | None:
 
 def _features_version(features: list[str]) -> GodotVersion | None:
     """The version entry of config/features, e.g. 4.3 in ("4.3", "Forward Plus")."""
-    return next((v for f in features if (v := _parse_version(f))), None)
+    return next((v.major_minor for f in features if (v := _parse_version(f))), None)
+
+
+def _feature_tag(version: GodotVersion) -> str:
+    """The `config/features` entry Godot writes for a version, e.g. "4.3"."""
+    return f"{version.major}.{version.minor}"
 
 
 def _is_unterminated(value: str) -> bool:
@@ -203,11 +209,9 @@ def read(project_path: Path) -> ProjectMetadata:
                 icon_abs_path,
             )
 
-    version_file_path = project_dir / ENGINE_VERSION_FILE
-    if version_file_path.exists():
-        with open(version_file_path, "r", encoding="utf-8") as f:
-            version_str = f.read().strip()
-            data["engine_version"] = GodotVersion.parse(version_str)
+    engine_version = read_engine_version(project_path)
+    if engine_version:
+        data["engine_version"] = engine_version
 
     if compatibility_version:
         data["compatibility_version"] = compatibility_version
@@ -259,7 +263,7 @@ def create(
 
         if engine_version and engine_version.major >= 4:
             f.write(
-                f'config/features=PackedStringArray("{engine_version.major_minor}")\n'
+                f'config/features=PackedStringArray("{_feature_tag(engine_version)}")\n'
             )
             if tags:
                 f.write(f"config/tags={_packed(tags)}\n")
@@ -323,7 +327,7 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
         )
         features = [f for f in existing if _parse_version(f) is None]
         if val is not None:
-            features.insert(0, str(val.major_minor))
+            features.insert(0, _feature_tag(val))
         properties["config/features"] = _packed(features) if features else None
 
     if "icon_path" in changed and metadata["icon_path"] is None:
@@ -431,9 +435,45 @@ def write_properties(
         os.replace(temp_name, project_path)
 
 
+def read_engine_version(project_path: Path) -> GodotVersion | None:
+    """
+    Reads the engine version pinned in the project's `.godot-version` file.
+
+    The version is the first line that isn't blank or a `#` comment (later lines are
+    ignored).
+
+    Args:
+        project_path (Path): Path to the project file.
+
+    Returns:
+        The pinned version, or None if the project has no `.godot-version`.
+
+    Raises:
+        VersionFileError: If the file isn't UTF-8 or holds no valid version.
+    """
+    version_file = project_path.parent / ENGINE_VERSION_FILE
+    try:
+        text = version_file.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        return None
+    except UnicodeDecodeError as e:
+        raise VersionFileError(f"{version_file} is not UTF-8") from e
+
+    lines = (line.strip() for line in text.splitlines())
+    line = next((x for x in lines if x and not x.startswith("#")), None)
+    if line is None:
+        raise VersionFileError(f"{version_file} has no version")
+    try:
+        return GodotVersion.parse(line)
+    except ValueError as e:
+        raise VersionFileError(f"{version_file}: {e}") from e
+
+
 def set_engine_version(project_path: Path, engine_version: GodotVersion):
     """
-    Writes a new engine version to the provided project file.
+    Pins an engine version in the project's `.godot-version` file.
+
+    Writes the canonical form, e.g. `4.3.stable.mono`, on one line.
 
     Args:
         project_path (Path): Path to the project file.
@@ -447,7 +487,7 @@ def set_engine_version(project_path: Path, engine_version: GodotVersion):
 
     version_file = project_path.parent / ENGINE_VERSION_FILE
     with open(version_file, "w", encoding="utf-8", newline="\n") as f:
-        f.write(str(engine_version))
+        f.write(f"{engine_version}\n")
 
 
 def set_project_icon(project_path: Path, icon_path: Path):

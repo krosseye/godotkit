@@ -16,26 +16,17 @@ RELEASE_CHANNEL_RANKING = {
     CHANNEL_STABLE: 4,
 }
 
-CSHARP_PARSE_VARIANTS: set[str] = {"mono", "dotnet", ".net"}
-CSHARP_URL_VARIANTS: set[str] = {
-    "_mono",
-    "_dotnet",
-    ".net",
-}  # For future-proofing; only mono is officially used currently.
+CSHARP_MARKER: str = "mono"
 
 URL_VERSION_REGEX = re.compile(r"/download/([^/]+)/")
 
-REGEX_PART_CORE_VERSION: str = r"(?:v)?([0-9]+\.[0-9]+(?:\.[0-9]+)?)"  # Group 1: major.minor(.patch) - e.g., "4.6.2" or "v4.5"
-REGEX_PART_RELEASE_CHANNEL: str = r"(?:-(dev|alpha|beta|rc|stable)([1-9][0-9]*)?)?"  # Group 2: channel, Group 3: channel number
-REGEX_PART_CSHARP_VARIANT: str = r"(?:\s*\((mono|\.net|dotnet)\))?"  # Group 4: optional variant string (e.g., "(Mono)", "(.NET)")
-
-STRING_PARSE_REGEX = re.compile(
-    f"^{REGEX_PART_CORE_VERSION}{REGEX_PART_RELEASE_CHANNEL}{REGEX_PART_CSHARP_VARIANT}$",
-    re.IGNORECASE,
-)
-URL_PARSE_REGEX = re.compile(
-    f"^{REGEX_PART_CORE_VERSION}{REGEX_PART_RELEASE_CHANNEL}$",
-    re.IGNORECASE,
+PARSE_REGEX = re.compile(
+    r"""
+    v?(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(?:\.(?P<patch>[0-9]+))?
+    (?:[-.](?P<channel>dev|alpha|beta|rc|stable)(?P<channel_num>[1-9][0-9]*)?)?
+    (?P<csharp>(?:[-._+]|\s+)(?:mono|dotnet)|\s*\((?:mono|\.net)\))?
+    """,
+    re.IGNORECASE | re.ASCII | re.VERBOSE,
 )
 
 
@@ -44,16 +35,23 @@ URL_PARSE_REGEX = re.compile(
 class GodotVersion:
     """
     An immutable Godot Engine version: major/minor/patch, release channel,
-    and C# support (Mono/.NET). Supports parsing from strings and URLs, and
-    version comparisons.
+    and C# support (Mono/.NET).
+
+    `str(version)` is the canonical form, Godot's own version string
+    (`GODOT_VERSION_FULL_CONFIG`): `4.3.stable`, `4.4.rc2`, `4.3.stable.mono`.
+    See the version format page in the docs for the full grammar.
 
     Args:
         major: The major version number (e.g., 4 in 4.1.0).
         minor: The minor version number (e.g., 1 in 4.1.0).
         patch: The patch version number (e.g., 0 in 4.1.0).
-        channel: The release channel (e.g., 'stable', 'rc', 'dev').
-        channel_num: The sequential number for the channel (e.g., 2 in 'rc2').
+        channel: The release channel: 'dev', 'alpha', 'beta', 'rc' or 'stable'.
+        channel_num: The number after the channel (e.g., 2 in 'rc2'); 0 for none.
         csharp_enabled: True if this is a Mono/.NET variant build.
+
+    Raises:
+        ValueError: For an unknown channel, a negative number, or a channel
+            number on stable.
     """
 
     major: int
@@ -73,20 +71,29 @@ class GodotVersion:
             raise ValueError("A stable version has no channel number")
 
     def __str__(self) -> str:
-        if self.patch > 0:
-            base = f"{self.major}.{self.minor}.{self.patch}"
-        else:
-            base = f"{self.major}.{self.minor}"
+        """The canonical form, e.g. `4.3.stable`, `4.4.rc2` or `3.6.stable.mono`."""
+        text = f"{self._number}.{self._status}"
+        return f"{text}.{CSHARP_MARKER}" if self.csharp_enabled else text
 
-        if self.channel != CHANNEL_STABLE:
-            base += f"-{self.channel}"
-            if self.channel_num > 0:
-                base += str(self.channel_num)
+    @property
+    def display_name(self) -> str:
+        """
+        A name for people, e.g. `4.3`, `4.4-rc2 (.NET)` or `3.6 (Mono)`.
 
-        if self.csharp_enabled:
-            base += f" ({self.variant})"
+        `parse` accepts it, but store and compare `str(version)` instead.
+        """
+        text = self._number if self.is_stable else f"{self._number}-{self._status}"
+        return f"{text} ({self.variant})" if self.csharp_enabled else text
 
-        return base
+    @property
+    def _number(self) -> str:
+        if self.patch:
+            return f"{self.major}.{self.minor}.{self.patch}"
+        return f"{self.major}.{self.minor}"
+
+    @property
+    def _status(self) -> str:
+        return f"{self.channel}{self.channel_num or ''}"
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, GodotVersion):
@@ -107,10 +114,11 @@ class GodotVersion:
         Parses a Godot version string into a GodotVersion object.
 
         Examples of supported strings:
-            "4.6-dev2 (.NET)"
-            "3.6.2 (Mono)"
-            "4.5.1"
-            "4.5"
+            "4.3.stable.mono"   the canonical form
+            "4.3", "4.3.0"      no channel means stable
+            "4.4-rc2", "v4.4.rc2"
+            "4.3 mono", "4.3-dotnet", "4.3_mono", "4.3+mono"
+            "4.6-dev2 (.NET)", "3.6.2 (Mono)"   the `display_name` form
 
         Args:
             version_string: The string representation of the version.
@@ -119,24 +127,21 @@ class GodotVersion:
             A new GodotVersion instance.
 
         Raises:
-            ValueError: If the version string format is invalid.
+            ValueError: If the string isn't a version, or has an unknown
+                channel, a channel number of 0, or a number on stable.
         """
-        match = STRING_PARSE_REGEX.match(version_string.strip())
+        match = PARSE_REGEX.fullmatch(version_string.strip())
         if not match:
-            raise ValueError(f"Invalid Godot version string: {version_string}")
+            raise ValueError(f"Invalid Godot version string: {version_string!r}")
 
-        version_parts = match.group(1).split(".")
-        major = int(version_parts[0])
-        minor = int(version_parts[1])
-        patch = int(version_parts[2]) if len(version_parts) > 2 else 0
-
-        channel = match.group(2).lower() if match.group(2) else CHANNEL_STABLE
-        channel_num = int(match.group(3)) if match.group(3) else 0
-
-        variant_str = match.group(4) or ""
-        csharp_enabled = variant_str.strip().lower() in CSHARP_PARSE_VARIANTS
-
-        return cls(major, minor, patch, channel, channel_num, csharp_enabled)
+        return cls(
+            int(match["major"]),
+            int(match["minor"]),
+            int(match["patch"] or 0),
+            match["channel"] or CHANNEL_STABLE,
+            int(match["channel_num"] or 0),
+            bool(match["csharp"]),
+        )
 
     @classmethod
     def from_tag(cls, tag: str, csharp_enabled: bool = False) -> "GodotVersion":
@@ -158,7 +163,7 @@ class GodotVersion:
     @classmethod
     def from_url(cls, url: str) -> "GodotVersion":
         """
-        Creates a GodotVersion from a GitHub release URL.
+        Creates a GodotVersion from a GitHub release asset URL.
 
         Args:
             url: The full URL of the release asset.
@@ -173,28 +178,8 @@ class GodotVersion:
         if not version_match:
             raise ValueError(f"Could not find version string in URL: {url}")
 
-        version_string_from_url = version_match.group(1)
-
-        match = URL_PARSE_REGEX.match(version_string_from_url)
-        if not match:
-            raise ValueError(
-                f"Invalid version string in URL: {version_string_from_url}"
-            )
-
-        version_parts = match.group(1).split(".")
-        major = int(version_parts[0])
-        minor = int(version_parts[1])
-        patch = int(version_parts[2]) if len(version_parts) > 2 else 0
-
-        channel = match.group(2).lower() if match.group(2) else CHANNEL_STABLE
-        channel_num = int(match.group(3)) if match.group(3) else 0
-
-        filename_lower = url.split("/")[-1].lower()
-        csharp_enabled = any(
-            variant in filename_lower for variant in CSHARP_URL_VARIANTS
-        )
-
-        return cls(major, minor, patch, channel, channel_num, csharp_enabled)
+        filename = url.rsplit("/", 1)[-1].lower()
+        return cls.from_tag(version_match.group(1), f"_{CSHARP_MARKER}" in filename)
 
     def to_tag(self) -> str:
         """
@@ -203,8 +188,7 @@ class GodotVersion:
         The tag is the same for the standard and C# builds, so `csharp_enabled`
         is left out. `from_tag(v.to_tag(), v.csharp_enabled)` gives back `v`.
         """
-        tag = str(replace(self, csharp_enabled=False))
-        return f"{tag}-{CHANNEL_STABLE}" if self.is_stable else tag
+        return f"{self._number}-{self._status}"
 
     def _key(self) -> tuple[int, int, int, int, int, bool]:
         """
