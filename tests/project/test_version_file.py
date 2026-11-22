@@ -4,11 +4,13 @@ import pytest
 
 from godotkit.engine import GodotVersion
 from godotkit.exceptions import VersionFileError
+from godotkit.project import GodotProject
 from godotkit.project.parse import (
     create,
     read,
     read_engine_version,
     set_engine_version,
+    update,
 )
 
 
@@ -87,3 +89,18 @@ class TestFeatureTag:
             "utf-8",
         )
         assert read(path)["compatibility_version"] == GodotVersion(4, 3)
+
+
+class TestBrokenPin:
+    def test_other_edits_still_work(self, project_file: Path):
+        write_pin(project_file, b"latest\n")
+        update(project_file, {"name": "Renamed"})
+        assert 'config/name="Renamed"' in project_file.read_text("utf-8")
+
+    @pytest.mark.parametrize("pin", [GodotVersion(4, 3), None])
+    def test_setting_or_clearing_engine_version_repairs_it(
+        self, project_file: Path, pin: GodotVersion | None
+    ):
+        write_pin(project_file, b"latest\n")
+        update(project_file, {"engine_version": pin})
+        assert GodotProject(project_file).engine_version == pin

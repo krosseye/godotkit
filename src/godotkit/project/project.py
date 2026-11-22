@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import cast
 
 from godotkit.project.utils import open_directory
 
@@ -22,6 +21,7 @@ class GodotProject:
 
         Raises:
             FileNotFoundError: If the provided path is not a valid file.
+            VersionFileError: If the project's `.godot-version` is malformed.
         """
         self._file_path = file_path
 
@@ -30,8 +30,21 @@ class GodotProject:
 
         self.metadata: ProjectMetadata = read(self._file_path)
 
-    def _update(self, **changes) -> None:
-        update(self._file_path, cast(ProjectMetadata, changes))
+    def update(self, metadata: ProjectMetadata) -> None:
+        """
+        Writes the given fields to the project, then re-reads it into `metadata`.
+
+        A key left out leaves that field alone; a key set to `None` clears it.
+
+        Args:
+            metadata (ProjectMetadata): The fields to change.
+
+        Raises:
+            FileNotFoundError: If the project file no longer exists.
+            VersionFileError: If the project's `.godot-version` is malformed
+                and `metadata` doesn't set `engine_version`.
+        """
+        update(self._file_path, metadata)
         self.metadata = read(self._file_path)
 
     @property
@@ -46,7 +59,7 @@ class GodotProject:
         """
         Sets the name of the project.
         """
-        self._update(name=value)
+        self.update({"name": value})
 
     @property
     def description(self) -> str | None:
@@ -60,7 +73,7 @@ class GodotProject:
         """
         Sets the description of the project.
         """
-        self._update(description=value)
+        self.update({"description": value})
 
     @property
     def version(self) -> str | None:
@@ -74,7 +87,7 @@ class GodotProject:
         """
         Sets the version of the project.
         """
-        self._update(version=value)
+        self.update({"version": value})
 
     @property
     def tags(self) -> list[str] | None:
@@ -88,7 +101,7 @@ class GodotProject:
         """
         Sets the list of tags associated with the project.
         """
-        self._update(tags=value)
+        self.update({"tags": value})
 
     @property
     def file_path(self) -> Path:
@@ -123,7 +136,7 @@ class GodotProject:
         """
         Sets the engine version associated with the project.
         """
-        self._update(engine_version=value)
+        self.update({"engine_version": value})
 
     @property
     def compatibility_version(self) -> GodotVersion | None:
@@ -137,7 +150,7 @@ class GodotProject:
         """
         Sets the compatibility version associated with the project.
         """
-        self._update(compatibility_version=value)
+        self.update({"compatibility_version": value})
 
     def start(self, binary_path: Path) -> None:
         """

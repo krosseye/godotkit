@@ -163,7 +163,20 @@ def read(project_path: Path) -> ProjectMetadata:
 
     Returns:
         ProjectMetadata
+
+    Raises:
+        FileNotFoundError: If the provided path is not a valid file.
+        VersionFileError: If the project's `.godot-version` is malformed.
     """
+    data = _read_project_file(project_path)
+    engine_version = read_engine_version(project_path)
+    if engine_version:
+        data["engine_version"] = engine_version
+    return data
+
+
+def _read_project_file(project_path: Path) -> ProjectMetadata:
+    """`read()` without the `.godot-version` pin."""
     logger.debug("Attempting to parse Godot project file: %s", project_path)
     if not project_path.is_file():
         logger.error("Project file not found: %s", project_path)
@@ -208,10 +221,6 @@ def read(project_path: Path) -> ProjectMetadata:
                 icon_res_path,
                 icon_abs_path,
             )
-
-    engine_version = read_engine_version(project_path)
-    if engine_version:
-        data["engine_version"] = engine_version
 
     if compatibility_version:
         data["compatibility_version"] = compatibility_version
@@ -290,6 +299,10 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
     A key left out of `metadata` leaves that field alone. A key set to `None`
     clears it (the property is removed from `project.godot`).
 
+    The `.godot-version` pin is only read by `read()`, never here, so a
+    malformed pin doesn't block other edits, and setting `engine_version`
+    (or clearing it) repairs one.
+
     Args:
         project_path (Path): Path to the project.godot file.
         metadata (ProjectMetadata): The fields to change.
@@ -297,10 +310,12 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
     Raises:
         FileNotFoundError: If the provided path is not a valid file.
     """
-    current_metadata = read(project_path)
+    current_metadata = _read_project_file(project_path)
     changed = {
         key for key, value in metadata.items() if value != current_metadata.get(key)
     }
+    if "engine_version" in metadata:
+        changed.add("engine_version")
 
     def text(value: str | None) -> str | None:
         return None if value is None else _quote(value)

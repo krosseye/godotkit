@@ -67,6 +67,19 @@ class TestUpdate:
         assert read(project_file)["tags"] == ["t"]
         assert project.name == "New"
 
+    def test_project_update_writes_several_fields_and_refreshes(
+        self, project_file: Path
+    ):
+        project = GodotProject(project_file)
+
+        project.update(
+            {"name": "Both", "tags": ["x"], "engine_version": GodotVersion(4, 3)}
+        )
+
+        assert (project.name, project.tags) == ("Both", ["x"])
+        assert project.engine_version == GodotVersion(4, 3)
+        assert read(project_file) == project.metadata
+
 
 class TestMissingAndCleared:
     def test_missing_fields_are_left_out(self, tmp_path: Path):
