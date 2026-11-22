@@ -1,10 +1,7 @@
-import logging
 from pathlib import Path
 
 from godotkit.common import launch_daemon_command, remove_directory
 from godotkit.common import open_directory as open_dir
-
-logger = logging.getLogger(__name__)
 
 
 def open_directory(project_dir: Path) -> None:
@@ -30,24 +27,16 @@ def start(binary_path: Path, project_path: Path) -> None:
         project_path (Path): The '.godot' project file path.
 
     Raises:
-        FileNotFoundError: If the provided path is not a valid file.
+        FileNotFoundError: If `binary_path` or `project_path` is not a file.
+        OSError: If the binary can't be started.
     """
     if not binary_path.is_file():
-        logger.error("Invalid binary file path")
-        raise FileNotFoundError("Invalid binary file path")
-
-    if project_path.is_dir() or not str(project_path).endswith(".godot"):
-        logger.error("Invalid project file path")
-        raise FileNotFoundError("Invalid project file path")
-
-    try:
-        command: list[str] = []
-        command.append(str(binary_path))
-        command.append("-e")
-        launch_daemon_command(command, working_dir=project_path.parent)
-
-    except Exception:
-        logger.exception("Failed to launch Godot Engine")
+        raise FileNotFoundError(f"Godot binary not found: {binary_path}")
+    if not project_path.is_file():
+        raise FileNotFoundError(f"Project file not found: {project_path}")
+    launch_daemon_command(
+        [str(binary_path), "--path", str(project_path.parent), "--editor"]
+    )
 
 
 def remove(project_path: Path) -> None:

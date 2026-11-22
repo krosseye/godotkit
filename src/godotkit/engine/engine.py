@@ -26,7 +26,8 @@ class GodotEngine:
         Launches the Godot Engine executable.
 
         Raises:
-            ValueError: If the provided path is not a valid file.
+            FileNotFoundError: If the binary is gone.
+            OSError: If the binary can't be started.
         """
         start(self.binary_path)
 
@@ -38,7 +39,8 @@ class GodotEngine:
             project_path (Path): The '.godot' project file path.
 
         Raises:
-            ValueError: If the provided path is not a valid file.
+            FileNotFoundError: If the binary or the project file is missing.
+            OSError: If the binary can't be started.
         """
         start_project(self.binary_path, project_path)
 

@@ -112,19 +112,12 @@ def start(binary_path: Path) -> None:
         binary_path (Path): The full path to the Godot binary file.
 
     Raises:
-        ValueError: If the provided path is not a valid file.
+        FileNotFoundError: If `binary_path` is not a file.
+        OSError: If the binary can't be started.
     """
     if not binary_path.is_file():
-        logger.error("Invalid binary file path")
-        raise ValueError("Invalid binary file path")
-
-    try:
-        command: list[str] = []
-        command.append(str(binary_path))
-        launch_daemon_command(command)
-
-    except Exception:
-        logger.exception("Failed to launch Godot Engine")
+        raise FileNotFoundError(f"Godot binary not found: {binary_path}")
+    launch_daemon_command([str(binary_path)])
 
 
 def remove(engine_dir: Path) -> None:

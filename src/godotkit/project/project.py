@@ -160,7 +160,8 @@ class GodotProject:
             binary_path (Path): Path to the Godot Engine binary.
 
         Raises:
-            FileNotFoundError: If the provided path is not a valid file.
+            FileNotFoundError: If the binary or the project file is missing.
+            OSError: If the binary can't be started.
         """
         start(binary_path, self._file_path)
 
