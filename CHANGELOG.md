@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v0.11.0 (2026-11-22)
+
+### Features
+
+- Launch with captured output
+  ([`b3bff1b`](https://github.com/krosseye/godotkit/commit/b3bff1b92a925f1839893be8c657ca4bf94f1f95))
+
+- Let Godot launch failures raise
+  ([`9c7f262`](https://github.com/krosseye/godotkit/commit/9c7f262a7c4047944a6651071f10b5c9c0f92240))
+
+- Make common module private
+  ([`09815b2`](https://github.com/krosseye/godotkit/commit/09815b28404955de3bbb2ed67a326abfcd38f4f6))
+
+- Make init_repo raise instead of returning bool
+  ([`234bf40`](https://github.com/krosseye/godotkit/commit/234bf406436f08ac8e7329acc7f4f1d2388b8d94))
+
+- Remove feed module
+  ([`6e52029`](https://github.com/krosseye/godotkit/commit/6e520298c3d65f2dcca63e32c6f60e65b789c7bd))
+
+- Remove trivial wrapper functions
+  ([`933e256`](https://github.com/krosseye/godotkit/commit/933e256538255b6f4f827d8cc328eb5e80469c4d))
+
+
 ## v0.10.0 (2026-11-22)
 
 ### Bug Fixes
