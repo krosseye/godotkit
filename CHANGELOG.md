@@ -2,6 +2,47 @@
 
 <!-- version list -->
 
+## v0.10.0 (2026-11-22)
+
+### Bug Fixes
+
+- Reject unknown channels and lossy channel numbers
+  ([`b2abb10`](https://github.com/krosseye/godotkit/commit/b2abb1008cb5b1e43e64c53f6d8d9e044074976f))
+
+### Build System
+
+- Bump pydantic to 2.14.4 for Python 3.15 wheels
+  ([`173ed37`](https://github.com/krosseye/godotkit/commit/173ed37bd5202b0a4275773d5f677429c1625399))
+
+### Continuous Integration
+
+- Commit uv.lock and install locked dependencies
+  ([`732ea0c`](https://github.com/krosseye/godotkit/commit/732ea0c1d12997821e72cc377f87bd04a59f8b60))
+
+### Features
+
+- Cancellable downloads, phase reporting, no silent skip
+  ([`e0fec07`](https://github.com/krosseye/godotkit/commit/e0fec07be38cdc5c30c68bbaf2c29e7c28636163))
+
+- Configurable release cache and target filtering
+  ([`02b3d1d`](https://github.com/krosseye/godotkit/commit/02b3d1d5d866a94041005f5474f5c5c2a7c5fee2))
+
+- Dotted canonical version format
+  ([`e703dab`](https://github.com/krosseye/godotkit/commit/e703dabf90b75c5c5386e102785d5b734a3ebe84))
+
+- GodotRelease.version is a GodotVersion
+  ([`316b208`](https://github.com/krosseye/godotkit/commit/316b208c6200c81be02a8d1bc6751ea3257ca8c3))
+
+- Look up releases by GodotVersion
+  ([`34d706b`](https://github.com/krosseye/godotkit/commit/34d706b47adf3cf321f9c3406e2baa090401a8c4))
+
+- Public GodotProject.update(metadata)
+  ([`484df38`](https://github.com/krosseye/godotkit/commit/484df3886bddb1463cf53f4227e356cc1dfd665b))
+
+- Return None for missing project metadata
+  ([`98e7007`](https://github.com/krosseye/godotkit/commit/98e7007fc9e7b36a1dd75e96b3bbd51d0d689e71))
+
+
 ## v0.9.0 (2026-11-20)
 
 ### Bug Fixes
