@@ -3,6 +3,7 @@ import logging
 import os
 import platform
 import time
+from dataclasses import replace
 from datetime import datetime
 from importlib.resources import files
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Self
 import httpx
 
 from godotkit.constants import RELEASE_CACHE_TTL, RELEASE_FETCHER_TIMEOUT, USER_AGENT
+from godotkit.exceptions import AssetNotFoundError, ReleaseNotFoundError
 
 from .version_parsing import CSHARP_URL_VARIANTS, GodotVersion
 
@@ -124,21 +126,29 @@ class GodotRelease:
         self.assets = assets
 
     def get_asset(
-        self, platform: str, arch: str | None = None, csharp: bool = False
+        self,
+        platform: str | None = None,
+        arch: str | None = None,
+        csharp: bool = False,
     ) -> GodotAsset | None:
+        """Returns this release's editor build for a target, or None if it has none.
+
+        Args:
+            platform: One of `PLATFORMS`. Defaults to `detect_platform()`.
+            arch: One of `ARCHS`. Defaults to `detect_architecture()`.
+            csharp: True for the .NET build.
+
+        Raises:
+            ValueError: If `platform` or `arch` isn't a known name.
         """
-        Retrieves a matching asset based on platform, architecture, and mono status.
-        'arch' must be explicitly provided.
-        """
-        if not arch:
-            logger.debug("Cannot find asset: architecture not provided.")
-            return None
+        platform = platform or detect_platform()
+        arch = arch or detect_architecture()
+        if platform not in PLATFORMS or arch not in ARCHS:
+            raise ValueError(f"Unknown platform or architecture: {platform}/{arch}")
 
         suffixes = ASSET_SUFFIXES.get((platform, arch, csharp))
         if not suffixes:
-            logger.warning(
-                "Platform/Architecture combination not supported: %s/%s", platform, arch
-            )
+            logger.debug("Godot has no editor build for %s/%s.", platform, arch)
             return None
 
         by_name = {asset.name: asset for asset in self.assets}
@@ -388,39 +398,42 @@ class GodotFetcher:
         except OSError as e:
             logger.warning("Could not write release cache %s: %s", path, e)
 
-    def get_download_url(
+    def find_asset(
         self,
-        version: str,
-        platform_name: str | None = None,
-        arch_name: str | None = None,
-        mono: bool = False,
-    ) -> str:
-        """
-        Retrieves the direct download URL for a specific version and target.
-        """
-        platform_name = platform_name or detect_platform()
-        arch_name = arch_name or detect_architecture()
+        version: GodotVersion,
+        platform: str | None = None,
+        arch: str | None = None,
+    ) -> GodotAsset:
+        """Finds the editor build of `version` for a target.
 
-        logger.info(
-            "Attempting to find download URL for version %s on %s/%s, mono=%s",
-            version,
-            platform_name,
-            arch_name,
-            mono,
-        )
+        Fetches releases first if none are cached. `version.csharp_enabled`
+        picks the .NET build.
 
-        release = next((r for r in self.cache if r.tag == version), None)
+        Args:
+            version: The version to find, e.g. `GodotVersion.parse("4.3")`.
+            platform: One of `PLATFORMS`. Defaults to `detect_platform()`.
+            arch: One of `ARCHS`. Defaults to `detect_architecture()`.
+
+        Raises:
+            ReleaseNotFoundError: If no release has this version. Call
+                `fetch_releases(refresh_cache=True)` first if it's brand new.
+            AssetNotFoundError: If the release has no build for this target.
+            ValueError: If `platform` or `arch` isn't a known name.
+        """
+        if not self.cache:
+            self.fetch_releases()
+
+        wanted = replace(version, csharp_enabled=False)
+        release = next((r for r in self.cache if r.version == wanted), None)
         if not release:
-            raise ValueError(
-                f"Version {version} not found. Call fetch_releases() first, "
-                "or with refresh_cache=True if it was released recently."
-            )
+            raise ReleaseNotFoundError(f"No Godot release found for {wanted}.")
 
-        asset = release.get_asset(platform_name, arch_name, mono)
+        asset = release.get_asset(platform, arch, version.csharp_enabled)
         if not asset:
-            raise ValueError(
-                f"No download found for {platform_name} {arch_name} mono={mono} in version {version}"
+            raise AssetNotFoundError(
+                f"Godot {version} has no editor build for "
+                f"{platform or detect_platform()}/{arch or detect_architecture()}."
             )
 
-        logger.info("Found asset URL for %s: %s", version, asset.url)
-        return asset.url
+        logger.info("Found %s for %s.", asset.url, version)
+        return asset

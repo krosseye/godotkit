@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from godotkit.engine import GodotVersion
+from godotkit.engine import AssetNotFoundError, GodotVersion, ReleaseNotFoundError
 from godotkit.engine.release_fetcher import (
     ASSET_SUFFIXES,
     RELEASE_DATES,
@@ -14,6 +14,7 @@ from godotkit.engine.release_fetcher import (
     detect_architecture,
     detect_platform,
 )
+from godotkit.exceptions import GodotkitError
 
 MOCK_GH_RELEASE_DATA = [
     {
@@ -175,12 +176,24 @@ class TestGodotRelease:
         assert asset.name == "Godot_v4.1.1-stable_mono_linux_x86_64.zip"
         assert asset.csharp_enabled is True
 
-    def test_get_asset_with_no_arch_returns_none(self, godot_release_4_1_1):
-        asset = godot_release_4_1_1.get_asset("linux", arch=None, csharp=False)
-        assert asset is None
+    def test_get_asset_defaults_to_this_machine(self, godot_release_4_1_1, mocker):
+        mocker.patch(
+            "godotkit.engine.release_fetcher.detect_platform", return_value="linux"
+        )
+        mocker.patch(
+            "godotkit.engine.release_fetcher.detect_architecture", return_value="x86_64"
+        )
+        assert godot_release_4_1_1.get_asset().url == "http://linux_std"
 
-    def test_get_asset_with_unsupported_combo_returns_none(self, godot_release_4_1_1):
+    def test_get_asset_with_unbuilt_combo_returns_none(self, godot_release_4_1_1):
         assert godot_release_4_1_1.get_asset("windows", "arm32") is None
+
+    @pytest.mark.parametrize("platform, arch", [("win", "x86_64"), ("linux", "amd64")])
+    def test_get_asset_with_unknown_name_raises(
+        self, godot_release_4_1_1, platform, arch
+    ):
+        with pytest.raises(ValueError, match="Unknown platform or architecture"):
+            godot_release_4_1_1.get_asset(platform, arch)
 
 
 class TestGodotReleaseVersion:
@@ -365,35 +378,50 @@ class TestGodotFetcherReleaseFetching:
         assert len(mock_fetcher.fetch_releases(stable_only=False)) == 2
 
 
-class TestGodotFetcherDownloadURL:
-    def test_get_download_url_with_matching_asset_returns_url(
-        self, mock_fetcher, godot_release_4_1_1, mocker
+class TestGodotFetcherFindAsset:
+    @pytest.mark.parametrize("spelling", ["4.1.1", "4.1.1-stable", "v4.1.1-stable"])
+    def test_finds_by_any_spelling_of_the_version(
+        self, mock_fetcher, godot_release_4_1_1, spelling
     ):
         mock_fetcher.cache = [godot_release_4_1_1]
-        mocker.patch(
-            "godotkit.engine.release_fetcher.detect_platform", return_value="windows"
+        asset = mock_fetcher.find_asset(
+            GodotVersion.parse(spelling), "windows", "x86_64"
         )
-        mocker.patch(
-            "godotkit.engine.release_fetcher.detect_architecture", return_value="x86_64"
-        )
-        url = mock_fetcher.get_download_url("4.1.1-stable", mono=False)
-        assert url == "http://win64"
+        assert asset.url == "http://win64"
 
-    def test_get_download_url_with_missing_version_raises_value_error(
-        self, mock_fetcher
-    ):
-        mock_fetcher.cache = []
-        with pytest.raises(ValueError, match="Version 9.9.9-stable not found"):
-            mock_fetcher.get_download_url("9.9.9-stable")
-
-    def test_get_download_url_with_no_matching_asset_raises_value_error(
+    def test_csharp_flag_picks_the_dotnet_build(
         self, mock_fetcher, godot_release_4_1_1
     ):
         mock_fetcher.cache = [godot_release_4_1_1]
-        with pytest.raises(
-            ValueError, match="No download found for linux arm64 mono=False"
-        ):
-            mock_fetcher.get_download_url("4.1.1-stable", "linux", "arm64", mono=False)
+        version = GodotVersion(4, 1, 1, csharp_enabled=True)
+        assert mock_fetcher.find_asset(version, "linux", "x86_64").url == (
+            "http://linux_mono"
+        )
+
+    def test_fetches_when_nothing_is_cached(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        asset = mock_fetcher.find_asset(
+            GodotVersion(4, 0, channel="rc", channel_num=1), "macos", "arm64"
+        )
+        assert asset.url == "http://example.com/macos_rc.zip"
+
+    def test_missing_version_raises_release_not_found(
+        self, mock_fetcher, godot_release_4_1_1
+    ):
+        mock_fetcher.cache = [godot_release_4_1_1]
+        with pytest.raises(ReleaseNotFoundError, match="9.9.9"):
+            mock_fetcher.find_asset(GodotVersion(9, 9, 9))
+
+    def test_missing_build_raises_asset_not_found(
+        self, mock_fetcher, godot_release_4_1_1
+    ):
+        mock_fetcher.cache = [godot_release_4_1_1]
+        with pytest.raises(AssetNotFoundError, match="linux/arm64"):
+            mock_fetcher.find_asset(GodotVersion(4, 1, 1), "linux", "arm64")
+
+    def test_lookup_errors_are_godotkit_errors(self):
+        assert issubclass(ReleaseNotFoundError, GodotkitError)
+        assert issubclass(AssetNotFoundError, GodotkitError)
 
 
 def test_release_dates_ship_with_the_package():

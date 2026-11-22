@@ -1,4 +1,9 @@
-from godotkit.exceptions import DownloadError, ExtractError
+from godotkit.exceptions import (
+    AssetNotFoundError,
+    DownloadError,
+    ExtractError,
+    ReleaseNotFoundError,
+)
 
 from . import utils
 from .engine import GodotEngine
@@ -12,6 +17,7 @@ from .release_fetcher import (
 from .version_parsing import GodotVersion
 
 __all__ = [
+    "AssetNotFoundError",
     "DownloadError",
     "ExtractError",
     "GodotAsset",
@@ -19,6 +25,7 @@ __all__ = [
     "GodotFetcher",
     "GodotRelease",
     "GodotVersion",
+    "ReleaseNotFoundError",
     "detect_architecture",
     "detect_platform",
     "utils",
