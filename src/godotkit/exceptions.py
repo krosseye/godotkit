@@ -6,6 +6,10 @@ class DownloadError(GodotkitError):
     """A release download failed."""
 
 
+class DownloadCancelled(GodotkitError):
+    """A download was stopped by its `cancel` callback."""
+
+
 class ExtractError(GodotkitError):
     """A downloaded release could not be extracted."""
 

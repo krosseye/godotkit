@@ -15,6 +15,8 @@ Catch `GodotkitError` to handle every failed operation in one place. The engine 
 
 ::: godotkit.exceptions.DownloadError
 
+::: godotkit.exceptions.DownloadCancelled
+
 ::: godotkit.exceptions.ExtractError
 
 ::: godotkit.exceptions.ReleaseNotFoundError

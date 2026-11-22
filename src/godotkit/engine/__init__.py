@@ -1,5 +1,6 @@
 from godotkit.exceptions import (
     AssetNotFoundError,
+    DownloadCancelled,
     DownloadError,
     ExtractError,
     ReleaseNotFoundError,
@@ -18,6 +19,7 @@ from .version_parsing import GodotVersion
 
 __all__ = [
     "AssetNotFoundError",
+    "DownloadCancelled",
     "DownloadError",
     "ExtractError",
     "GodotAsset",

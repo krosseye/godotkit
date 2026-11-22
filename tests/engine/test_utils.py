@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from godotkit.engine import ExtractError
+from godotkit.engine import DownloadCancelled, ExtractError
 from godotkit.engine.utils import _swap_in, download_and_extract, find_binary
 
 ELF = b"\x7fELF" + b"\0" * 12
@@ -93,16 +93,64 @@ class TestDownloadAndExtract:
         assert sorted(p.name for p in install.iterdir()) == ["Godot.exe"]
         assert sorted(p.name for p in tmp_path.iterdir()) == ["godot.zip", "install"]
 
-    def test_without_overwrite_skips_non_empty_install(self, tmp_path: Path, serve):
+    def test_without_overwrite_refuses_non_empty_install(self, tmp_path: Path, serve):
         install = tmp_path / "install"
         install.mkdir()
         (install / "Godot.exe").write_text("old")
         stream = serve(make_zip(tmp_path / "godot.zip", {"Godot.exe": (b"new", 0)}))
 
-        download_and_extract(DOWNLOAD_URL, install)
+        with pytest.raises(FileExistsError):
+            download_and_extract(DOWNLOAD_URL, install)
 
         stream.assert_not_called()
         assert (install / "Godot.exe").read_text() == "old"
+
+    def test_reports_download_then_extract_phase(self, tmp_path: Path, serve):
+        payload = make_zip(
+            tmp_path / "godot.zip", {"a.txt": (b"a", 0), "b.txt": (b"b", 0)}
+        )
+        serve(payload)
+        calls = []
+
+        download_and_extract(
+            DOWNLOAD_URL,
+            tmp_path / "install",
+            progress_callback=lambda *a: calls.append(a),
+        )
+
+        size = len(payload)
+        assert calls == [
+            ("download", size, size),
+            ("extract", 1, 2),
+            ("extract", 2, 2),
+        ]
+
+    def test_cancel_stops_download_and_cleans_up(self, tmp_path: Path, serve):
+        serve(make_zip(tmp_path / "godot.zip", {"Godot.exe": (b"new", 0)}))
+
+        with pytest.raises(DownloadCancelled):
+            download_and_extract(
+                DOWNLOAD_URL, tmp_path / "install", cancel=lambda: True
+            )
+
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["godot.zip"]
+
+    @pytest.mark.parametrize("phase", ["download", "extract"])
+    def test_callback_exceptions_propagate_unwrapped(
+        self, tmp_path: Path, serve, phase
+    ):
+        serve(make_zip(tmp_path / "godot.zip", {"Godot.exe": (b"new", 0)}))
+
+        def progress(current_phase, done, total):
+            if current_phase == phase:
+                raise InterruptedError
+
+        with pytest.raises(InterruptedError):
+            download_and_extract(
+                DOWNLOAD_URL, tmp_path / "install", progress_callback=progress
+            )
+
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["godot.zip"]
 
     def test_fills_empty_existing_dir(self, tmp_path: Path, serve):
         install = tmp_path / "install"

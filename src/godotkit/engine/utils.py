@@ -1,7 +1,6 @@
 import logging
 import os
 import platform
-import shutil
 import tempfile
 import zipfile
 from collections.abc import Callable
@@ -12,23 +11,24 @@ import httpx
 from godotkit.common import launch_daemon_command, remove_directory
 from godotkit.common import open_directory as open_dir
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
-from godotkit.exceptions import DownloadError, ExtractError
+from godotkit.exceptions import DownloadCancelled, DownloadError, ExtractError
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_with_modes(zip_ref: zipfile.ZipFile, dest: Path) -> None:
-    """Extracts all members, restoring the Unix permissions zipfile drops."""
-    for info in zip_ref.infolist():
-        path = zip_ref.extract(info, dest)
-        mode = (info.external_attr >> 16) & 0o777  # Unix permission bits
-        if (
-            os.name == "posix"
-            and info.create_system == 3  # made on Unix
-            and mode
-            and not info.is_dir()
-        ):
-            os.chmod(path, mode)
+def _extract_with_mode(
+    zip_ref: zipfile.ZipFile, info: zipfile.ZipInfo, dest: Path
+) -> None:
+    """Extracts one member, restoring the Unix permissions zipfile drops."""
+    path = zip_ref.extract(info, dest)
+    mode = (info.external_attr >> 16) & 0o777  # Unix permission bits
+    if (
+        os.name == "posix"
+        and info.create_system == 3  # made on Unix
+        and mode
+        and not info.is_dir()
+    ):
+        os.chmod(path, mode)
 
 
 def _swap_in(staged: Path, target: Path, backup: Path) -> None:
@@ -147,26 +147,35 @@ def download_and_extract(
     save_path: Path,
     timeout: float = RELEASE_DOWNLOAD_TIMEOUT,
     overwrite: bool = False,
-    progress_callback: Callable[[int, int | None], None] | None = None,
+    progress_callback: Callable[[str, int, int | None], None] | None = None,
+    cancel: Callable[[], bool] | None = None,
 ) -> None:
     """
     Downloads a zip file from the given URL and extracts its contents.
+
+    Nothing at `save_path` changes until extraction has fully succeeded.
 
     Args:
         url: The URL to download the zip file from.
         save_path: The directory path to save the extracted contents to.
         timeout: HTTP request timeout in seconds.
-        overwrite: Whether to overwrite existing files on extraction.
-        progress_callback: Optional callback(progress_bytes, total_bytes) to track download progress.
+        overwrite: Whether to replace a non-empty `save_path`.
+        progress_callback: Called as `(phase, done, total)`. In the
+            `"download"` phase these are bytes, and `total` is None if the
+            server didn't send a size. In the `"extract"` phase they're files.
+            Exceptions it raises propagate unchanged.
+        cancel: Checked before each downloaded chunk; return True to stop.
+            Extraction can't be cancelled.
 
     Raises:
+        FileExistsError: If `save_path` isn't empty and `overwrite` is False.
+        DownloadCancelled: If `cancel` returned True.
         DownloadError: On network or write failure.
         ExtractError: On an invalid or empty zip, or a failed extraction.
     """
     save_path = Path(save_path)
     if save_path.is_dir() and any(save_path.iterdir()) and not overwrite:
-        logger.info("Download skipped, %s is not empty.", save_path)
-        return
+        raise FileExistsError(f"{save_path} isn't empty; pass overwrite=True.")
     save_path.parent.mkdir(parents=True, exist_ok=True)
 
     headers = {"User-Agent": USER_AGENT}
@@ -194,53 +203,59 @@ def download_and_extract(
                 downloaded = 0
 
                 try:
-                    with temp_zip.open("wb") as f:
-                        for chunk in response.iter_bytes():
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if progress_callback:
-                                progress_callback(downloaded, total_bytes)
+                    f = temp_zip.open("wb")
                 except OSError as e:
                     raise DownloadError(f"Failed to write to {temp_zip}: {e}") from e
+                with f:
+                    for chunk in response.iter_bytes():
+                        if cancel and cancel():
+                            raise DownloadCancelled(f"Download of {url} cancelled.")
+                        try:
+                            f.write(chunk)
+                        except OSError as e:
+                            raise DownloadError(
+                                f"Failed to write to {temp_zip}: {e}"
+                            ) from e
+                        downloaded += len(chunk)
+                        if progress_callback:
+                            progress_callback("download", downloaded, total_bytes)
 
         except httpx.RequestError as e:
             raise DownloadError(f"Network error during download from {url}: {e}") from e
-        except Exception as e:
-            if not isinstance(e, DownloadError):
-                raise DownloadError(f"Unexpected error during download: {e}") from e
-            raise
 
         # Extract phase
+        if not zipfile.is_zipfile(temp_zip):
+            raise ExtractError(f"File downloaded from {url} is not a valid zip file.")
         try:
-            if not zipfile.is_zipfile(temp_zip):
-                raise ExtractError(
-                    f"File downloaded from {url} is not a valid zip file."
-                )
+            zip_ref = zipfile.ZipFile(temp_zip, "r")
+        except (zipfile.BadZipFile, OSError) as e:
+            raise ExtractError(f"Couldn't open the zip from {url}: {e}") from e
+        with zip_ref:
+            members = zip_ref.infolist()
+            if not members:
+                raise ExtractError(f"The zip file from {url} is empty.")
 
-            with zipfile.ZipFile(temp_zip, "r") as zip_ref:
-                members = zip_ref.namelist()
-                if not members:
-                    raise ExtractError(f"The zip file from {url} is empty.")
+            for done, info in enumerate(members, 1):
+                try:
+                    _extract_with_mode(zip_ref, info, temp_extract)
+                except (zipfile.BadZipFile, OSError) as e:
+                    raise ExtractError(f"Couldn't extract {info.filename}: {e}") from e
+                if progress_callback:
+                    progress_callback("extract", done, len(members))
 
-                temp_extract.mkdir(parents=True, exist_ok=True)
-                _extract_with_modes(zip_ref, temp_extract)
+        extracted_items = list(temp_extract.iterdir())
+        if (
+            len(extracted_items) == 1
+            and extracted_items[0].is_dir()
+            and extracted_items[0].suffix != ".app"
+        ):
+            source_dir = extracted_items[0]
+        else:
+            source_dir = temp_extract
 
-            extracted_items = list(temp_extract.iterdir())
-
-            if (
-                len(extracted_items) == 1
-                and extracted_items[0].is_dir()
-                and extracted_items[0].suffix != ".app"
-            ):
-                source_dir = extracted_items[0]
-            else:
-                source_dir = temp_extract
-
+        try:
             _swap_in(source_dir, save_path, tmp_path / "old")
-
-        except zipfile.BadZipFile as e:
+        except OSError as e:
             raise ExtractError(
-                f"The downloaded file is not a valid zip archive: {e}"
+                f"Couldn't move the install into {save_path}: {e}"
             ) from e
-        except (OSError, shutil.Error) as e:
-            raise ExtractError(f"Error during extraction or file move: {e}") from e
