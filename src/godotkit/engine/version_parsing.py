@@ -25,8 +25,8 @@ CSHARP_URL_VARIANTS: set[str] = {
 
 URL_VERSION_REGEX = re.compile(r"/download/([^/]+)/")
 
-REGEX_PART_CORE_VERSION: str = r"(?:v)?(\d+\.\d+(?:\.\d+)?)"  # Group 1: major.minor(.patch) - e.g., "4.6.2" or "v4.5"
-REGEX_PART_RELEASE_CHANNEL: str = r"(?:-([a-z]+)(\d+)?)?"  # Group 2: channel (e.g., "dev", "rc"), Group 3: channel number (e.g., "2", "1")
+REGEX_PART_CORE_VERSION: str = r"(?:v)?([0-9]+\.[0-9]+(?:\.[0-9]+)?)"  # Group 1: major.minor(.patch) - e.g., "4.6.2" or "v4.5"
+REGEX_PART_RELEASE_CHANNEL: str = r"(?:-(dev|alpha|beta|rc|stable)([1-9][0-9]*)?)?"  # Group 2: channel, Group 3: channel number
 REGEX_PART_CSHARP_VARIANT: str = r"(?:\s*\((mono|\.net|dotnet)\))?"  # Group 4: optional variant string (e.g., "(Mono)", "(.NET)")
 
 STRING_PARSE_REGEX = re.compile(
@@ -65,6 +65,12 @@ class GodotVersion:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "channel", self.channel.lower())
+        if self.channel not in RELEASE_CHANNEL_RANKING:
+            raise ValueError(f"Unknown release channel: {self.channel!r}")
+        if min(self.major, self.minor, self.patch, self.channel_num) < 0:
+            raise ValueError(f"Negative version number in {self!r}")
+        if self.is_stable and self.channel_num:
+            raise ValueError("A stable version has no channel number")
 
     def __str__(self) -> str:
         if self.patch > 0:
@@ -200,20 +206,18 @@ class GodotVersion:
         tag = str(replace(self, csharp_enabled=False))
         return f"{tag}-{CHANNEL_STABLE}" if self.is_stable else tag
 
-    def _key(self) -> tuple[int, int, int, int, str, int, bool]:
+    def _key(self) -> tuple[int, int, int, int, int, bool]:
         """
         Returns a tuple suitable for ordering, equality and hashing.
 
-        Unknown channels rank lowest and tie-break by name. The C# variant is
-        a deterministic tie-break, not "older": it sorts below the standard
-        build so newest-first lists (reverse=True) show standard first.
+        The C# variant is a deterministic tie-break, not "older": it sorts below the
+        standard build so newest-first lists (reverse=True) show standard first.
         """
         return (
             self.major,
             self.minor,
             self.patch,
-            RELEASE_CHANNEL_RANKING.get(self.channel, -1),
-            self.channel,
+            RELEASE_CHANNEL_RANKING[self.channel],
             self.channel_num,
             self.is_standard,
         )

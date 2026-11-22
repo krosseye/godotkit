@@ -122,13 +122,26 @@ class TestComparison:
         assert str(v.major_minor) == "4.10"
         assert GodotVersion(4, 10).major_minor > GodotVersion(4, 9).major_minor
 
-    def test_unknown_channels_are_distinct(self):
-        a = GodotVersion(4, 0, channel="foo")
-        b = GodotVersion(4, 0, channel="bar")
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"channel": "foo"},
+            {"channel": "mono"},
+            {"channel": "stable", "channel_num": 2},
+            {"channel_num": -1, "channel": "rc"},
+            {"patch": -1},
+        ],
+    )
+    def test_invalid_fields_raise(self, kwargs):
+        with pytest.raises(ValueError):
+            GodotVersion(4, 0, **kwargs)
 
-        assert a != b
-        assert len({a, b}) == 2
-        assert (a < b) != (b < a)
+    @pytest.mark.parametrize(
+        "text", ["4.3-mono", "4.3-stable2", "4.4-rc0", "4.3-foo1", "٤.٣", "4.3-rc1x"]
+    )
+    def test_parse_rejects_ambiguous_or_lossy_input(self, text):
+        with pytest.raises(ValueError):
+            GodotVersion.parse(text)
 
     def test_ordering_is_total_across_variants(self):
         std = GodotVersion(4, 0)
