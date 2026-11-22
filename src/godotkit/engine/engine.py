@@ -1,6 +1,5 @@
+import subprocess
 from pathlib import Path
-
-from godotkit.project.utils import start as start_project
 
 from .utils import find_binary, open_directory, remove, start
 from .version_parsing import GodotVersion
@@ -21,28 +20,34 @@ class GodotEngine:
         else:
             raise FileNotFoundError(f"Cannot find Godot binary in {engine_dir}")
 
-    def start(self) -> None:
+    def start(self, *, output: Path | None = None) -> subprocess.Popen:
         """
         Launches the Godot Engine executable.
+
+        Args:
+            output (Optional[Path]): File that receives Godot's stdout and stderr.
 
         Raises:
             FileNotFoundError: If the binary is gone.
             OSError: If the binary can't be started.
         """
-        start(self.binary_path)
+        return start(self.binary_path, output=output)
 
-    def start_project(self, project_path: Path) -> None:
+    def start_project(
+        self, project_path: Path, *, output: Path | None = None
+    ) -> subprocess.Popen:
         """
-        Launches the provided project file with this version of the Godot Engine.
+        Opens the provided project in this version's editor.
 
         Args:
             project_path (Path): The '.godot' project file path.
+            output (Optional[Path]): File that receives Godot's stdout and stderr.
 
         Raises:
             FileNotFoundError: If the binary or the project file is missing.
             OSError: If the binary can't be started.
         """
-        start_project(self.binary_path, project_path)
+        return start(self.binary_path, project=project_path, output=output)
 
     def open_directory(self) -> None:
         """

@@ -1,9 +1,10 @@
 import logging
 import os
 import platform
+import subprocess
 import tempfile
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import httpx
@@ -104,20 +105,37 @@ def open_directory(engine_dir: Path) -> None:
     open_dir(engine_dir)
 
 
-def start(binary_path: Path) -> None:
+def start(
+    binary_path: Path,
+    args: Sequence[str] = (),
+    *,
+    project: Path | None = None,
+    output: Path | None = None,
+) -> subprocess.Popen:
     """
-    Launches the Godot Engine executable found at the given path.
+    Launches Godot detached: the project manager, or `project` in the editor.
 
     Args:
         binary_path (Path): The full path to the Godot binary file.
+        args (Sequence[str]): Extra command-line arguments for Godot.
+        project (Optional[Path]): A `project.godot` file to open in the editor.
+        output (Optional[Path]): File that receives Godot's stdout and stderr.
+
+    Returns:
+        The started Godot process.
 
     Raises:
-        FileNotFoundError: If `binary_path` is not a file.
+        FileNotFoundError: If `binary_path` or `project` is not a file.
         OSError: If the binary can't be started.
     """
     if not binary_path.is_file():
         raise FileNotFoundError(f"Godot binary not found: {binary_path}")
-    launch_daemon_command([str(binary_path)])
+    command = [str(binary_path)]
+    if project is not None:
+        if not project.is_file():
+            raise FileNotFoundError(f"Project file not found: {project}")
+        command += ["--path", str(project.parent), "--editor"]
+    return launch_daemon_command([*command, *args], output=output)
 
 
 def remove(engine_dir: Path) -> None:

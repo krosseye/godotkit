@@ -97,38 +97,42 @@ def run_utility_command(
 def launch_daemon_command(
     command: list[str],
     working_dir: Path | None = None,
-) -> None:
+    output: Path | None = None,
+) -> subprocess.Popen:
     """Launches a system command in a non-blocking, detached manner.
 
     Args:
         command (List[str]): Command and arguments, e.g. ['xdg-open', 'file.pdf'].
         working_dir (Optional[Path]): Working directory for the command.
+        output (Optional[Path]): File that receives stdout and stderr (overwritten).
+            Discarded when omitted.
+
+    Returns:
+        The started process.
 
     Raises:
         FileNotFoundError: If the working directory does not exist.
+        OSError: If the command or the output file can't be opened.
     """
-    cmd_str = " ".join(command)
-    logger.debug("Launching background command: %s", cmd_str)
+    logger.debug("Launching background command: %s", " ".join(command))
 
     if working_dir is not None and not working_dir.is_dir():
         raise FileNotFoundError(f"Invalid working directory: {working_dir}")
 
     if sys.platform == "win32":
-        creationflags = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        )
-        subprocess.Popen(
-            command,
-            cwd=None if working_dir is None else str(working_dir),
-            creationflags=creationflags,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        flags = {
+            "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
+            | subprocess.DETACHED_PROCESS
+        }
     else:
-        subprocess.Popen(
+        flags = {"start_new_session": True}
+
+    with open(output or os.devnull, "wb") as out:
+        return subprocess.Popen(
             command,
-            cwd=None if working_dir is None else str(working_dir),
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            cwd=working_dir,
+            stdin=subprocess.DEVNULL,
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            **flags,  # type: ignore[call-overload]
         )

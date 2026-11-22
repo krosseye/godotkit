@@ -1,16 +1,23 @@
+import sys
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from godotkit.engine import utils as engine_utils
-from godotkit.project import utils as project_utils
+from godotkit.project import GodotProject
+
+Launches = list[tuple[list[str], Path | None]]
 
 
 @pytest.fixture
-def launched(mocker):
-    calls: list[list[str]] = []
-    mocker.patch.object(engine_utils, "launch_daemon_command", calls.append)
-    mocker.patch.object(project_utils, "launch_daemon_command", calls.append)
+def launched(mocker: MockerFixture) -> Launches:
+    calls: Launches = []
+    mocker.patch.object(
+        engine_utils,
+        "launch_daemon_command",
+        lambda command, output=None: calls.append((command, output)),
+    )
     return calls
 
 
@@ -30,34 +37,43 @@ def project_file(tmp_path: Path) -> Path:
 
 
 def test_engine_start(binary: Path, launched):
-    engine_utils.start(binary)
-    assert launched == [[str(binary)]]
+    engine_utils.start(binary, ["--verbose"])
+    assert launched == [([str(binary), "--verbose"], None)]
 
 
-def test_project_start_passes_path(binary: Path, project_file: Path, launched):
-    project_utils.start(binary, project_file)
-    assert launched == [[str(binary), "--path", str(project_file.parent), "--editor"]]
+def test_project_start_passes_path_and_output(
+    binary: Path, project_file: Path, tmp_path: Path, launched
+):
+    log = tmp_path / "godot.log"
+    GodotProject(project_file).start(binary, output=log)
+    command = [str(binary), "--path", str(project_file.parent), "--editor"]
+    assert launched == [(command, log)]
 
 
 @pytest.mark.parametrize(
-    "start",
+    "kwargs",
     [
-        lambda b, p: engine_utils.start(b.with_name("missing.exe")),
-        lambda b, p: project_utils.start(b.with_name("missing.exe"), p),
-        lambda b, p: project_utils.start(b, p.with_name("missing.godot")),
+        lambda b, p: {"binary_path": b.with_name("missing.exe")},
+        lambda b, p: {"binary_path": b, "project": p.with_name("missing.godot")},
     ],
-    ids=["engine binary", "project binary", "project file"],
+    ids=["binary", "project file"],
 )
-def test_missing_file_raises(binary: Path, project_file: Path, launched, start):
+def test_missing_file_raises(binary: Path, project_file: Path, launched, kwargs):
     with pytest.raises(FileNotFoundError):
-        start(binary, project_file)
+        engine_utils.start(**kwargs(binary, project_file))
     assert launched == []
 
 
-def test_launch_failure_propagates(binary: Path, project_file: Path):
+def test_launch_failure_propagates(binary: Path):
     # Unmocked: a non-executable file makes Popen itself raise.
     binary.write_text("not a program")
     with pytest.raises(OSError):
         engine_utils.start(binary)
-    with pytest.raises(OSError):
-        project_utils.start(binary, project_file)
+
+
+def test_output_is_captured(tmp_path: Path):
+    log = tmp_path / "out.log"
+    script = "import sys; print('out'); print('err', file=sys.stderr)"
+    process = engine_utils.start(Path(sys.executable), ["-c", script], output=log)
+    assert process.wait(timeout=10) == 0
+    assert sorted(log.read_text().split()) == ["err", "out"]

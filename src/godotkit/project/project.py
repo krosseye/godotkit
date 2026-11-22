@@ -1,10 +1,12 @@
+import subprocess
 from pathlib import Path
 
 from godotkit.project.utils import open_directory
 
+from ..engine.utils import start
 from ..engine.version_parsing import GodotVersion
 from .parse import ProjectMetadata, read, update
-from .utils import remove, start
+from .utils import remove
 
 
 class GodotProject:
@@ -152,18 +154,21 @@ class GodotProject:
         """
         self.update({"compatibility_version": value})
 
-    def start(self, binary_path: Path) -> None:
+    def start(
+        self, binary_path: Path, *, output: Path | None = None
+    ) -> subprocess.Popen:
         """
-        Launches the project with the provided Godot Engine binary.
+        Opens the project in the editor of the provided Godot Engine binary.
 
         Args:
             binary_path (Path): Path to the Godot Engine binary.
+            output (Optional[Path]): File that receives Godot's stdout and stderr.
 
         Raises:
             FileNotFoundError: If the binary or the project file is missing.
             OSError: If the binary can't be started.
         """
-        start(binary_path, self._file_path)
+        return start(binary_path, project=self._file_path, output=output)
 
     def open_directory(self) -> None:
         """
