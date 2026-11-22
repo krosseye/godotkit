@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from godotkit.engine import GodotVersion
 from godotkit.engine.release_fetcher import (
     ASSET_SUFFIXES,
     RELEASE_DATES,
@@ -75,7 +76,7 @@ def godot_release_4_1_1():
         ),
     ]
     return GodotRelease(
-        version="4.1.1-stable",
+        tag="4.1.1-stable",
         published_at=datetime(2023, 9, 15),
         assets=assets,
     )
@@ -182,16 +183,27 @@ class TestGodotRelease:
         assert godot_release_4_1_1.get_asset("windows", "arm32") is None
 
 
-class TestGodotFetcherVersionParsing:
-    def test_version_sort_key_with_stable_tag_returns_correct_key(self):
-        key = GodotFetcher.version_sort_key("4.1.2-stable")
-        assert key.major == 4
-        assert key.channel == "stable"
+class TestGodotReleaseVersion:
+    def test_version_is_parsed_from_tag(self):
+        release = GodotRelease("4.4-rc2", datetime(2025, 2, 20), [])
+        assert release.tag == "4.4-rc2"
+        assert release.version == GodotVersion(4, 4, channel="rc", channel_num=2)
+        assert release.version.csharp_enabled is False
 
-    def test_version_sort_key_with_malformed_tag_returns_default_key(self):
-        key = GodotFetcher.version_sort_key("junk-tag")
-        assert key.major == 0
-        assert key.channel == "dev"
+    def test_malformed_tag_raises(self):
+        with pytest.raises(ValueError):
+            GodotRelease("2.0.4.1-stable", datetime(2016, 1, 1), [])
+
+    def test_fetch_skips_malformed_tags_at_debug(self, mock_fetcher, caplog):
+        malformed = {**MOCK_GH_RELEASE_DATA[1], "tag_name": "3.2-alpha0-unofficial"}
+        setup_mock_response(mock_fetcher, [[*MOCK_GH_RELEASE_DATA, malformed], []])
+
+        with caplog.at_level("DEBUG", logger="godotkit.engine.release_fetcher"):
+            releases = mock_fetcher.fetch_releases(stable_only=False)
+
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        skipped = [r for r in caplog.records if "3.2-alpha0-unofficial" in r.message]
+        assert [r.levelname for r in skipped] == ["DEBUG"]
 
 
 class TestGodotFetcherReleaseFetching:
@@ -200,7 +212,7 @@ class TestGodotFetcherReleaseFetching:
     ):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         releases = mock_fetcher.fetch_releases(stable_only=True)
-        assert [r.version for r in releases] == ["4.1.1-stable"]
+        assert [r.tag for r in releases] == ["4.1.1-stable"]
         mock_fetcher.client.get.assert_called_with(
             f"{GodotFetcher.ALL_URL}?page=1&per_page=100"
         )
@@ -213,14 +225,14 @@ class TestGodotFetcherReleaseFetching:
         releases = mock_fetcher.fetch_releases(stable_only=False)
 
         mock_fetcher.client.get.assert_not_called()
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
     def test_baked_date_replaces_import_date(self, mock_fetcher, mocker):
         mocker.patch.dict(RELEASE_DATES, {"4.0-rc1": "2020-05-05"}, clear=True)
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
 
         dates = {
-            r.version: r.published_at
+            r.tag: r.published_at
             for r in mock_fetcher.fetch_releases(stable_only=False)
         }
 
@@ -237,12 +249,12 @@ class TestGodotFetcherReleaseFetching:
 
         releases = mock_fetcher.fetch_releases(stable_only=False, sort_by="date")
 
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
     def test_fetch_releases_with_all_returns_all_releases(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         releases = mock_fetcher.fetch_releases(stable_only=False)
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
         mock_fetcher.client.get.assert_called_with(
             f"{GodotFetcher.ALL_URL}?page=1&per_page=100"
         )
@@ -257,7 +269,7 @@ class TestGodotFetcherReleaseFetching:
         second.client = mocker.MagicMock()
         releases = second.fetch_releases(stable_only=False)
         second.client.get.assert_not_called()
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
         assert releases[0].assets[1].csharp_enabled is True
 
     def test_fetch_releases_ignores_expired_disk_cache(self, mocker, tmp_path):
@@ -313,7 +325,7 @@ class TestGodotFetcherReleaseFetching:
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
         releases = mock_fetcher.fetch_releases(stable_only=False, platform_only=True)
         assert len(releases) == 1
-        assert releases[0].version == "4.0-rc1"
+        assert releases[0].tag == "4.0-rc1"
 
     def test_fetch_releases_with_cache_skips_http_calls(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
@@ -327,7 +339,7 @@ class TestGodotFetcherReleaseFetching:
     def test_fetch_releases_with_max_releases_limits_after_sorting(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA[::-1], []])
         releases = mock_fetcher.fetch_releases(stable_only=False, max_releases=1)
-        assert [r.version for r in releases] == ["4.1.1-stable"]
+        assert [r.tag for r in releases] == ["4.1.1-stable"]
 
     def test_fetch_releases_cache_ignores_previous_filters(self, mock_fetcher, mocker):
         mocker.patch(
@@ -345,7 +357,7 @@ class TestGodotFetcherReleaseFetching:
         mock_fetcher.client.get.reset_mock()
         releases = mock_fetcher.fetch_releases(stable_only=False)
         mock_fetcher.client.get.assert_not_called()
-        assert [r.version for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
     def test_fetch_releases_returned_list_does_not_alias_cache(self, mock_fetcher):
         setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])

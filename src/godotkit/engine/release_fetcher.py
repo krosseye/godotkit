@@ -102,15 +102,24 @@ class GodotAsset:
 
 
 class GodotRelease:
-    """Represents a single Godot release version."""
+    """A single Godot release, e.g. the `4.3-stable` tag.
+
+    `version` is parsed from `tag`. A release covers both the standard and .NET
+    builds, so `version.csharp_enabled` is always False; use `get_asset(...,
+    csharp=True)` for the .NET build.
+
+    Raises:
+        ValueError: If `tag` isn't a valid Godot version tag.
+    """
 
     def __init__(
         self,
-        version: str,
+        tag: str,
         published_at: datetime,
         assets: list[GodotAsset],
     ):
-        self.version = version
+        self.tag = tag
+        self.version = GodotVersion.from_tag(tag)
         self.published_at = published_at
         self.assets = assets
 
@@ -134,14 +143,14 @@ class GodotRelease:
 
         by_name = {asset.name: asset for asset in self.assets}
         for suffix in suffixes:
-            asset = by_name.get(f"Godot_v{self.version}_{suffix}")
+            asset = by_name.get(f"Godot_v{self.tag}_{suffix}")
             if asset:
                 logger.debug("Found matching asset: %s", asset.name)
                 return asset
 
         logger.debug(
             "No matching asset found for %s on %s/%s (csharp=%s)",
-            self.version,
+            self.tag,
             platform,
             arch,
             csharp,
@@ -149,7 +158,7 @@ class GodotRelease:
         return None
 
     def __repr__(self):
-        return f"<GodotRelease {self.version}, published={self.published_at.date()}>"
+        return f"<GodotRelease {self.tag}, published={self.published_at.date()}>"
 
 
 def detect_platform() -> str:
@@ -228,17 +237,6 @@ class GodotFetcher:
         """Closes the underlying HTTP client."""
         self.client.close()
 
-    @staticmethod
-    def version_sort_key(tag: str, csharp: bool = False) -> GodotVersion:
-        """Converts a release tag like '4.5.1-stable' into a GodotVersion object for sorting."""
-        try:
-            return GodotVersion.from_tag(tag, csharp)
-        except ValueError:
-            logger.warning(
-                "Malformed version tag '%s' encountered. Sorting to bottom.", tag
-            )
-            return GodotVersion(0, 0, 0, channel="dev")
-
     def fetch_releases(
         self,
         stable_only: bool = True,
@@ -266,7 +264,7 @@ class GodotFetcher:
 
         releases = self.cache
         if stable_only:
-            releases = [r for r in releases if r.version.endswith("-stable")]
+            releases = [r for r in releases if r.version.is_stable]
         if platform_only:
             user_platform = detect_platform()
             user_arch = detect_architecture()
@@ -279,14 +277,10 @@ class GodotFetcher:
             ]
 
         if sort_by == "version":
-            releases = sorted(
-                releases, key=lambda r: self.version_sort_key(r.version), reverse=True
-            )
+            releases = sorted(releases, key=lambda r: r.version, reverse=True)
         else:
             releases = sorted(
-                releases,
-                key=lambda r: (r.published_at, self.version_sort_key(r.version)),
-                reverse=True,
+                releases, key=lambda r: (r.published_at, r.version), reverse=True
             )
 
         return releases[:max_releases] if max_releases else releases
@@ -332,9 +326,11 @@ class GodotFetcher:
                     )
                 )
 
-            releases.append(
-                GodotRelease(version=tag, published_at=published_at, assets=assets)
-            )
+            try:
+                releases.append(GodotRelease(tag, published_at, assets))
+            except ValueError:
+                # Known and permanent (e.g. 2.0.4.1-stable) so not worth a warning
+                logger.debug("Skipping release with malformed tag %r.", tag)
 
         logger.info("Successfully loaded %d releases.", len(releases))
         return releases
@@ -413,7 +409,7 @@ class GodotFetcher:
             mono,
         )
 
-        release = next((r for r in self.cache if r.version == version), None)
+        release = next((r for r in self.cache if r.tag == version), None)
         if not release:
             raise ValueError(
                 f"Version {version} not found. Call fetch_releases() first, "
