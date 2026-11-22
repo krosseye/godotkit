@@ -12,7 +12,6 @@ nav:
       - Getting Started: getting_started.md
       - Version Format: version_format.md
   - API Reference:
-      - api_reference/common.md
       - api_reference/exceptions.md
       - Engine:
           - api_reference/engine/engine.md

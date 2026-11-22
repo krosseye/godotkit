@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from godotkit.common import launch_daemon_command, run_utility_command
+from godotkit._common import launch_daemon_command, run_utility_command
 
 WRITE_CWD = (
     "import os, time; time.sleep({delay}); "

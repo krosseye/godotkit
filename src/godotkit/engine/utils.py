@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from godotkit.common import launch_daemon_command
+from godotkit._common import launch_daemon_command
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
 from godotkit.exceptions import DownloadCancelled, DownloadError, ExtractError
 

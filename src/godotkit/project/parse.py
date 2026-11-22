@@ -8,7 +8,7 @@ from typing import Optional, TypedDict
 
 from filelock import FileLock
 
-from ..common.git import git_installed, init_repo
+from .._common.git import git_installed, init_repo
 from ..engine.version_parsing import GodotVersion
 from ..exceptions import GitError, VersionFileError
 
