@@ -42,7 +42,7 @@ def init_repo(
     gitignore: str | None = None,
     gitattributes: str | None = None,
     initial_branch: str = "main",
-) -> bool:
+) -> None:
     """
     Initializes a Git repository in the given directory.
 
@@ -52,16 +52,15 @@ def init_repo(
         gitattributes: Optional content for the .gitattributes file.
         initial_branch: The name to use for the initial branch.
 
-    Returns:
-        True if initialization was successful, False otherwise.
+    Raises:
+        ValueError: If `initial_branch` isn't a valid branch name.
+        GitError: If Git is not installed or `git init` fails.
+        OSError: If the directory or the Git files can't be written.
     """
     if not re.match(r"^[a-zA-Z0-9_\-\./]+$", initial_branch):
-        logger.error("Invalid branch name provided: '%s'.", initial_branch)
-        return False
-
+        raise ValueError(f"Invalid branch name: {initial_branch!r}")
     if not git_installed():
-        logger.error("Git is not installed. Skipping initialization.")
-        return False
+        raise GitError("Git is not installed")
 
     dir_path.mkdir(parents=True, exist_ok=True)
     try:
@@ -72,26 +71,18 @@ def init_repo(
             capture_output=True,
             text=True,
         )
-        logger.info("Successfully initialized Git repository in %s", dir_path)
-        if gitignore:
-            (dir_path / ".gitignore").write_text(
-                gitignore, encoding="utf-8", newline="\n"
-            )
-        if gitattributes:
-            (dir_path / ".gitattributes").write_text(
-                gitattributes, encoding="utf-8", newline="\n"
-            )
-        return True
     except subprocess.CalledProcessError as e:
-        logger.error(
-            "Failed to initialize Git repository: %s. Command: %s",
-            e.stderr.strip(),
-            " ".join(e.cmd),
+        raise GitError(f"git init failed: {e.stderr.strip()}") from e
+    except FileNotFoundError as e:
+        raise GitError("Git command not found during execution") from e
+    logger.info("Initialized Git repository in %s", dir_path)
+
+    if gitignore:
+        (dir_path / ".gitignore").write_text(gitignore, encoding="utf-8", newline="\n")
+    if gitattributes:
+        (dir_path / ".gitattributes").write_text(
+            gitattributes, encoding="utf-8", newline="\n"
         )
-        return False
-    except Exception:
-        logger.exception("An unexpected error occurred during Git initialization")
-        return False
 
 
 def clone(

@@ -8,9 +8,9 @@ from typing import Optional, TypedDict
 
 from filelock import FileLock
 
-from ..common.git import init_repo
+from ..common.git import git_installed, init_repo
 from ..engine.version_parsing import GodotVersion
-from ..exceptions import VersionFileError
+from ..exceptions import GitError, VersionFileError
 
 ENGINE_VERSION_FILE = ".godot-version"
 
@@ -250,11 +250,15 @@ def create(
 
     Raises:
         FileExistsError: If `project_dir` already contains a project.godot file.
+        GitError: If `git_init` is set and Git is missing (checked before
+            anything is written) or `git init` fails.
     """
     logger.info("Attempting to create new Godot project at: %s", project_dir)
     project_file = project_dir / "project.godot"
     if project_file.exists():
         raise FileExistsError(f"Project file already exists: {project_file}")
+    if git_init and not git_installed():
+        raise GitError("Git is not installed")
 
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "addons").mkdir(exist_ok=True)

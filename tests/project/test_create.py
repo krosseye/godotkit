@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from godotkit.engine import GodotVersion
+from godotkit.exceptions import GitError
 from godotkit.project.parse import create, read
 
 
@@ -54,3 +55,11 @@ class TestCreate:
 
         for name in ("project.godot", ".godot-version", ".gitignore", ".gitattributes"):
             assert b"\r\n" not in (tmp_path / name).read_bytes(), name
+
+    def test_missing_git_writes_nothing(self, tmp_path: Path, mocker):
+        mocker.patch("godotkit.project.parse.git_installed", return_value=False)
+        project_dir = tmp_path / "game"
+
+        with pytest.raises(GitError):
+            create(project_dir, "Demo", git_init=True)
+        assert not project_dir.exists()
