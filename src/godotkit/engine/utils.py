@@ -9,8 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from godotkit.common import launch_daemon_command, remove_directory
-from godotkit.common import open_directory as open_dir
+from godotkit.common import launch_daemon_command
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
 from godotkit.exceptions import DownloadCancelled, DownloadError, ExtractError
 
@@ -91,20 +90,6 @@ def find_binary(dir_path: Path) -> Path | None:
         raise NotImplementedError(f"Unsupported platform: {current_platform}")
 
 
-def open_directory(engine_dir: Path) -> None:
-    """
-    Opens the given engine directory in the native file manager.
-
-    Args:
-        engine_dir (Path): The path to the directory to open.
-
-    Raises:
-        ValueError: If the provided path is not a valid directory.
-        NotImplementedError: If the current platform is unsupported.
-    """
-    open_dir(engine_dir)
-
-
 def start(
     binary_path: Path,
     args: Sequence[str] = (),
@@ -136,21 +121,6 @@ def start(
             raise FileNotFoundError(f"Project file not found: {project}")
         command += ["--path", str(project.parent), "--editor"]
     return launch_daemon_command([*command, *args], output=output)
-
-
-def remove(engine_dir: Path) -> None:
-    """
-    Recursively removes the Godot Engine installation directory.
-
-    Args:
-        engine_dir (Path): The path to the directory to remove.
-
-    Raises:
-        ValueError: If the path does not exist or is not a directory.
-        OSError: If an OS-related error occurs during deletion.
-        PermissionError: If the process lacks permission to delete files or subdirectories.
-    """
-    remove_directory(engine_dir)
 
 
 def download_and_extract(

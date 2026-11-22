@@ -23,7 +23,6 @@ nav:
       - Project:
           - api_reference/project/parse.md
           - api_reference/project/project.md
-          - api_reference/project/utils.md
 
 markdown_extensions:
   - pymdownx.highlight:

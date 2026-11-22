@@ -1,3 +1,0 @@
-# Utils
-
-::: godotkit.project.utils

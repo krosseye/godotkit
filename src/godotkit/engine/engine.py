@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from .utils import find_binary, open_directory, remove, start
+from .utils import find_binary, start
 from .version_parsing import GodotVersion
 
 
@@ -48,24 +48,3 @@ class GodotEngine:
             OSError: If the binary can't be started.
         """
         return start(self.binary_path, project=project_path, output=output)
-
-    def open_directory(self) -> None:
-        """
-        Opens the engine directory in the native file manager.
-
-        Raises:
-            ValueError: If the path is not a valid directory.
-            NotImplementedError: If the current platform is unsupported.
-        """
-        open_directory(self.directory_path)
-
-    def remove(self) -> None:
-        """
-        Recursively removes the Godot Engine installation directory.
-
-        Raises:
-            ValueError: If the path does not exist or is not a directory.
-            OSError: If an OS-related error occurs during deletion.
-            PermissionError: If the process lacks permission to delete files or subdirectories.
-        """
-        remove(self.directory_path)

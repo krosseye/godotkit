@@ -1,12 +1,9 @@
 import subprocess
 from pathlib import Path
 
-from godotkit.project.utils import open_directory
-
 from ..engine.utils import start
 from ..engine.version_parsing import GodotVersion
 from .parse import ProjectMetadata, read, update
-from .utils import remove
 
 
 class GodotProject:
@@ -169,24 +166,3 @@ class GodotProject:
             OSError: If the binary can't be started.
         """
         return start(binary_path, project=self._file_path, output=output)
-
-    def open_directory(self) -> None:
-        """
-        Opens the project directory in the native file manager.
-
-        Raises:
-            ValueError: If the path is not a valid project directory.
-            NotImplementedError: If the current platform is unsupported.
-        """
-        open_directory(self.dir_path)
-
-    def remove(self) -> None:
-        """
-        Recursively removes the project directory.
-
-        Raises:
-            ValueError: If the path does not exist or is not a directory.
-            OSError: If an OS-related error occurs during deletion.
-            PermissionError: If the process lacks permission to delete files or subdirectories.
-        """
-        remove(self.dir_path)
