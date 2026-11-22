@@ -127,19 +127,19 @@ class ProjectMetadata(TypedDict, total=False):
     Metadata for a Godot project.
 
     Attributes:
-        name (str): Project name.
-        description (str): Project description.
+        name (Optional[str]): Project name.
+        description (Optional[str]): Project description.
         version (Optional[str]): Project version.
         tags (Optional[list[str]]): List of tags.
-        file_path (Path): Absolute path to the project file.
-        dir_path (Path): Absolute path to the project directory.
+        file_path (Path): Absolute path to the project file (read-only).
+        dir_path (Path): Absolute path to the project directory (read-only).
         icon_path (Optional[Path]): Absolute path to the icon file.
         engine_version (Optional[GodotVersion]): Full engine version string.
         compatibility_version (Optional[GodotVersion]): Minimum compatible Godot version.
     """
 
-    name: str
-    description: str
+    name: str | None
+    description: str | None
     version: str | None
     tags: list[str] | None
     file_path: Path
@@ -179,14 +179,14 @@ def read(project_path: Path) -> ProjectMetadata:
     )
 
     data: ProjectMetadata = {
-        "name": name if name is not None else "Unnamed Project",
-        "description": description
-        if description is not None
-        else "No description provided.",
         "file_path": project_path.resolve(),
         "dir_path": project_dir.resolve(),
     }
 
+    if name is not None:
+        data["name"] = name
+    if description is not None:
+        data["description"] = description
     if version:
         data["version"] = version
     if tags:
@@ -255,7 +255,6 @@ def create(
         f.write(f"{GODOT_FILE_HEADER}\n\n")
         f.write("[application]\n\n")
         f.write(f"config/name={_quote(name)}\n")
-        f.write('config/version="0.1.0"\n')
         f.write(f"config/description={_quote(description)}\n")
 
         if engine_version and engine_version.major >= 4:
@@ -282,45 +281,53 @@ def create(
 
 def update(project_path: Path, metadata: ProjectMetadata) -> None:
     """
-    Updates the project metadata if it differs from the provided metadata.
-    Properties missing from the project file are added.
+    Writes the fields in `metadata` that differ from the project file.
+
+    A key left out of `metadata` leaves that field alone. A key set to `None`
+    clears it (the property is removed from `project.godot`).
 
     Args:
         project_path (Path): Path to the project.godot file.
-        metadata (ProjectMetadata): The new metadata to apply.
+        metadata (ProjectMetadata): The fields to change.
 
     Raises:
         FileNotFoundError: If the provided path is not a valid file.
     """
     current_metadata = read(project_path)
     changed = {
-        key
-        for key, value in metadata.items()
-        if value is not None and value != current_metadata.get(key)
+        key for key, value in metadata.items() if value != current_metadata.get(key)
     }
 
-    properties: dict[str, str] = {}
+    def text(value: str | None) -> str | None:
+        return None if value is None else _quote(value)
+
+    properties: dict[str, str | None] = {}
 
     if "name" in changed:
-        properties["config/name"] = _quote(metadata["name"])
+        properties["config/name"] = text(metadata["name"])
 
     if "description" in changed:
-        properties["config/description"] = _quote(metadata["description"])
+        properties["config/description"] = text(metadata["description"])
 
     if "version" in changed:
-        properties["config/version"] = _quote(metadata["version"] or "")
+        properties["config/version"] = text(metadata["version"])
 
     if "tags" in changed:
-        properties["config/tags"] = _packed(metadata["tags"] or [])
+        tags = metadata["tags"]
+        properties["config/tags"] = None if tags is None else _packed(tags)
 
     if "compatibility_version" in changed:
         val = metadata["compatibility_version"]
-        assert val is not None
         existing = _packed_strings(
             _read_section(project_path).get("config/features", "")
         )
-        others = [f for f in existing if _parse_version(f) is None]
-        properties["config/features"] = _packed([str(val.major_minor), *others])
+        features = [f for f in existing if _parse_version(f) is None]
+        if val is not None:
+            features.insert(0, str(val.major_minor))
+        properties["config/features"] = _packed(features) if features else None
+
+    if "icon_path" in changed and metadata["icon_path"] is None:
+        properties["config/icon"] = None
 
     if properties:
         write_properties(project_path, properties)
@@ -329,22 +336,28 @@ def update(project_path: Path, metadata: ProjectMetadata) -> None:
     if "icon_path" in changed and icon_path is not None:
         set_project_icon(project_path, icon_path)
 
-    engine_version = metadata.get("engine_version")
-    if "engine_version" in changed and engine_version is not None:
-        set_engine_version(project_path, engine_version)
+    if "engine_version" in changed:
+        engine_version = metadata["engine_version"]
+        if engine_version is None:
+            (project_path.parent / ENGINE_VERSION_FILE).unlink(missing_ok=True)
+        else:
+            set_engine_version(project_path, engine_version)
 
 
 def write_properties(
-    project_path: Path, properties: dict[str, str], category: str = "application"
+    project_path: Path,
+    properties: dict[str, str | None],
+    category: str = "application",
 ) -> None:
     """
     Writes properties to the given project file, replacing existing keys and
-    adding missing ones (and the section, if absent).
+    adding missing ones (and the section, if absent). A `None` value removes
+    the key.
 
     Args:
         project_path (Path): Path to the project file.
-        properties (dict[str, str]): Keys mapped to raw Godot values, e.g.
-            `{"config/name": '"My Game"'}`.
+        properties (dict[str, str | None]): Keys mapped to raw Godot values,
+            e.g. `{"config/name": '"My Game"'}`, or `None` to remove the key.
         category (str): Section to write the properties into.
 
     Raises:
@@ -357,7 +370,9 @@ def write_properties(
         i = len(lines)
         while i and not lines[i - 1].strip():
             i -= 1
-        lines[i:i] = [f"{key}={value}{nl}" for key, value in pending.items()]
+        lines[i:i] = [
+            f"{key}={value}{nl}" for key, value in pending.items() if value is not None
+        ]
         pending.clear()
 
     lock_path = project_path.with_suffix(project_path.suffix + ".lock")
@@ -396,11 +411,13 @@ def write_properties(
 
             key = key.strip()
             if is_inside_target_section and sep and key in pending:
-                updated_lines.append(f"{key}={pending.pop(key)}{nl}")
+                new_value = pending.pop(key)
+                if new_value is not None:
+                    updated_lines.append(f"{key}={new_value}{nl}")
             else:
                 updated_lines.extend(block)
 
-        if pending:
+        if any(v is not None for v in pending.values()):
             if not is_inside_target_section:
                 updated_lines.append(f"{nl}{target_section_header}{nl}")
             insert_pending(updated_lines)

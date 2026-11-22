@@ -35,42 +35,42 @@ class GodotProject:
         self.metadata = read(self._file_path)
 
     @property
-    def name(self) -> str:
+    def name(self) -> str | None:
         """
         Returns the name of the project.
         """
-        return self.metadata.get("name") or "Unnamed Project"
+        return self.metadata.get("name")
 
     @name.setter
-    def name(self, value: str) -> None:
+    def name(self, value: str | None) -> None:
         """
         Sets the name of the project.
         """
         self._update(name=value)
 
     @property
-    def description(self) -> str:
+    def description(self) -> str | None:
         """
         Returns the description of the project.
         """
-        return self.metadata.get("description") or "No description provided."
+        return self.metadata.get("description")
 
     @description.setter
-    def description(self, value: str) -> None:
+    def description(self, value: str | None) -> None:
         """
         Sets the description of the project.
         """
         self._update(description=value)
 
     @property
-    def version(self) -> str:
+    def version(self) -> str | None:
         """
         Returns the version of the project.
         """
-        return self.metadata.get("version") or "0.1.0"
+        return self.metadata.get("version")
 
     @version.setter
-    def version(self, value: str) -> None:
+    def version(self, value: str | None) -> None:
         """
         Sets the version of the project.
         """
@@ -84,7 +84,7 @@ class GodotProject:
         return self.metadata.get("tags")
 
     @tags.setter
-    def tags(self, value: list[str]) -> None:
+    def tags(self, value: list[str] | None) -> None:
         """
         Sets the list of tags associated with the project.
         """
@@ -119,7 +119,7 @@ class GodotProject:
         return self.metadata.get("engine_version")
 
     @engine_version.setter
-    def engine_version(self, value: GodotVersion) -> None:
+    def engine_version(self, value: GodotVersion | None) -> None:
         """
         Sets the engine version associated with the project.
         """
@@ -133,7 +133,7 @@ class GodotProject:
         return self.metadata.get("compatibility_version")
 
     @compatibility_version.setter
-    def compatibility_version(self, value: GodotVersion) -> None:
+    def compatibility_version(self, value: GodotVersion | None) -> None:
         """
         Sets the compatibility version associated with the project.
         """
