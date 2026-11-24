@@ -1,13 +1,21 @@
+import io
+import json
+import re
 import sys
-from datetime import UTC, datetime
+import tarfile
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from godotkit.engine import AssetNotFoundError, GodotVersion, ReleaseNotFoundError
+from godotkit.engine import (
+    AssetNotFoundError,
+    GodotVersion,
+    ReleaseNotFoundError,
+)
 from godotkit.engine.release_fetcher import (
     ASSET_SUFFIXES,
-    RELEASE_DATES,
+    OVERRIDES,
     GodotAsset,
     GodotFetcher,
     GodotRelease,
@@ -16,35 +24,43 @@ from godotkit.engine.release_fetcher import (
 )
 from godotkit.exceptions import GodotkitError
 
-MOCK_GH_RELEASE_DATA = [
+SHA = "ab" * 64
+
+MOCK_RELEASES = [
     {
-        "tag_name": "4.1.1-stable",
-        "published_at": "2023-09-15T12:00:00Z",
-        "assets": [
-            {
-                "name": "Godot_v4.1.1-stable_win64.exe.zip",
-                "browser_download_url": "http://example.com/win64.exe",
-                "size": 100000000,
-            },
-            {
-                "name": "Godot_v4.1.1-stable_mono_linux_x86_64.zip",
-                "browser_download_url": "http://example.com/linux_mono.zip",
-                "size": 200000000,
-            },
+        "tag": "4.1.1-stable",
+        "release_date": 1694779200,
+        "files": [
+            {"filename": "Godot_v4.1.1-stable_win64.exe.zip", "checksum": SHA},
+            {"filename": "Godot_v4.1.1-stable_mono_linux_x86_64.zip", "checksum": SHA},
         ],
     },
     {
-        "tag_name": "4.0-rc1",
-        "published_at": "2023-01-01T10:00:00Z",
-        "assets": [
-            {
-                "name": "Godot_v4.0-rc1_macos.universal.zip",
-                "browser_download_url": "http://example.com/macos_rc.zip",
-                "size": 50000000,
-            },
+        "tag": "4.0-rc1",
+        "release_date": 1672567200,
+        "files": [
+            {"filename": "Godot_v4.0-rc1_macos.universal.zip", "checksum": SHA},
         ],
     },
 ]
+
+
+def make_archive(releases: list[dict], extra: dict[str, bytes] | None = None) -> bytes:
+    """A godot-builds tarball holding `releases` (plus raw `extra` files)."""
+    members = {
+        f"releases/godot-{r['tag']}.json": json.dumps(
+            {k: v for k, v in r.items() if k != "tag"}
+        ).encode()
+        for r in releases
+    }
+    members |= extra or {}
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for name, body in members.items():
+            info = tarfile.TarInfo(f"godot-builds-main/{name}")
+            info.size = len(body)
+            tar.addfile(info, io.BytesIO(body))
+    return buf.getvalue()
 
 
 @pytest.fixture
@@ -60,36 +76,31 @@ def godot_release_4_1_1():
         GodotAsset(
             name="Godot_v4.1.1-stable_win64.exe.zip",
             url="http://win64",
-            size=100,
             csharp_enabled=False,
         ),
         GodotAsset(
             name="Godot_v4.1.1-stable_mono_linux_x86_64.zip",
             url="http://linux_mono",
-            size=200,
             csharp_enabled=True,
         ),
         GodotAsset(
             name="Godot_v4.1.1-stable_linux.x86_64.zip",
             url="http://linux_std",
-            size=150,
             csharp_enabled=False,
         ),
     ]
     return GodotRelease(
         tag="4.1.1-stable",
-        published_at=datetime(2023, 9, 15),
+        published_at=date(2023, 9, 15),
         assets=assets,
     )
 
 
-def setup_mock_response(mock_fetcher, pages):
+def setup_mock_response(mock_fetcher, archives):
     responses = []
-    for json_data in pages:
+    for releases in archives:
         mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = json_data
-        mock_response.raise_for_status.return_value = None
+        mock_response.content = make_archive(releases)
         responses.append(mock_response)
     mock_fetcher.client.get.side_effect = responses
 
@@ -155,8 +166,11 @@ class TestNativeDetection:
         ]
         release = GodotRelease(
             "4.3-stable",
-            datetime(2026, 11, 16),
-            [GodotAsset(n, f"https://example.com/{n}", 1, "_mono" in n) for n in names],
+            date(2026, 11, 16),
+            [
+                GodotAsset(n, f"https://example.com/{n}", csharp_enabled="_mono" in n)
+                for n in names
+            ],
         )
 
         asset = release.get_asset(detect_platform(), detect_architecture(), csharp)
@@ -198,18 +212,18 @@ class TestGodotRelease:
 
 class TestGodotReleaseVersion:
     def test_version_is_parsed_from_tag(self):
-        release = GodotRelease("4.4-rc2", datetime(2025, 2, 20), [])
+        release = GodotRelease("4.4-rc2", date(2025, 2, 20), [])
         assert release.tag == "4.4-rc2"
         assert release.version == GodotVersion(4, 4, channel="rc", channel_num=2)
         assert release.version.csharp_enabled is False
 
     def test_malformed_tag_raises(self):
         with pytest.raises(ValueError):
-            GodotRelease("2.0.4.1-stable", datetime(2016, 1, 1), [])
+            GodotRelease("2.0.4.1-stable", date(2016, 1, 1), [])
 
     def test_fetch_skips_malformed_tags_at_debug(self, mock_fetcher, caplog):
-        malformed = {**MOCK_GH_RELEASE_DATA[1], "tag_name": "3.2-alpha0-unofficial"}
-        setup_mock_response(mock_fetcher, [[*MOCK_GH_RELEASE_DATA, malformed], []])
+        malformed = {**MOCK_RELEASES[1], "tag": "3.2-alpha0-unofficial"}
+        setup_mock_response(mock_fetcher, [[*MOCK_RELEASES, malformed]])
 
         with caplog.at_level("DEBUG", logger="godotkit.engine.release_fetcher"):
             releases = mock_fetcher.fetch_releases(stable_only=False)
@@ -223,15 +237,13 @@ class TestGodotFetcherReleaseFetching:
     def test_fetch_releases_with_stable_only_returns_stable_releases(
         self, mock_fetcher
     ):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         releases = mock_fetcher.fetch_releases(stable_only=True)
         assert [r.tag for r in releases] == ["4.1.1-stable"]
-        mock_fetcher.client.get.assert_called_with(
-            f"{GodotFetcher.ALL_URL}?page=1&per_page=100"
-        )
+        mock_fetcher.client.get.assert_called_with(GodotFetcher.ARCHIVE_URL)
 
     def test_switching_stable_only_does_not_refetch(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         mock_fetcher.fetch_releases(stable_only=True)
         mock_fetcher.client.get.reset_mock()
 
@@ -240,42 +252,29 @@ class TestGodotFetcherReleaseFetching:
         mock_fetcher.client.get.assert_not_called()
         assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
-    def test_baked_date_replaces_import_date(self, mock_fetcher, mocker):
-        mocker.patch.dict(RELEASE_DATES, {"4.0-rc1": "2020-05-05"}, clear=True)
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+    def test_same_day_releases_sort_by_version_not_time(self, mock_fetcher):
+        # 3.6.1 published later in the day than 4.4, but 4.4 is the newer version
+        same_day = [
+            {"tag": "4.4-stable", "release_date": 1741000000},  # 11:06 UTC
+            {"tag": "3.6.1-stable", "release_date": 1741040000},  # 22:13 UTC
+        ]
+        setup_mock_response(mock_fetcher, [same_day])
 
-        dates = {
-            r.tag: r.published_at
-            for r in mock_fetcher.fetch_releases(stable_only=False)
-        }
+        releases = mock_fetcher.fetch_releases(sort_by="date")
 
-        assert dates == {
-            "4.1.1-stable": datetime(2023, 9, 15, 12),
-            "4.0-rc1": datetime(2020, 5, 5),
-        }
-
-    def test_date_sort_breaks_ties_by_version(self, mock_fetcher, mocker):
-        mocker.patch.dict(
-            RELEASE_DATES, {"4.1.1-stable": "2023-01-01", "4.0-rc1": "2023-01-01"}
-        )
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA[::-1], []])
-
-        releases = mock_fetcher.fetch_releases(stable_only=False, sort_by="date")
-
-        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        assert [r.tag for r in releases] == ["4.4-stable", "3.6.1-stable"]
+        assert releases[0].published_at == releases[1].published_at
 
     def test_fetch_releases_with_all_returns_all_releases(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         releases = mock_fetcher.fetch_releases(stable_only=False)
         assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
-        mock_fetcher.client.get.assert_called_with(
-            f"{GodotFetcher.ALL_URL}?page=1&per_page=100"
-        )
+        mock_fetcher.client.get.assert_called_with(GodotFetcher.ARCHIVE_URL)
 
     def test_fetch_releases_uses_disk_cache_across_instances(self, mocker, tmp_path):
         first = GodotFetcher(cache_dir=tmp_path)
         first.client = mocker.MagicMock()
-        setup_mock_response(first, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(first, [MOCK_RELEASES])
         first.fetch_releases(stable_only=False)
 
         second = GodotFetcher(cache_dir=tmp_path)
@@ -288,32 +287,88 @@ class TestGodotFetcherReleaseFetching:
     def test_fetch_releases_ignores_expired_disk_cache(self, mocker, tmp_path):
         first = GodotFetcher(cache_dir=tmp_path)
         first.client = mocker.MagicMock()
-        setup_mock_response(first, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(first, [MOCK_RELEASES])
         first.fetch_releases(stable_only=False)
 
         second = GodotFetcher(cache_dir=tmp_path, cache_ttl=-1)
         second.client = mocker.MagicMock()
-        setup_mock_response(second, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(second, [MOCK_RELEASES])
         second.fetch_releases(stable_only=False)
         assert second.client.get.call_count == 1
 
     def test_fetch_releases_refresh_cache_bypasses_disk_cache(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, MOCK_GH_RELEASE_DATA])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES, MOCK_RELEASES])
         mock_fetcher.fetch_releases(stable_only=False)
         mock_fetcher.fetch_releases(stable_only=False, refresh_cache=True)
         assert mock_fetcher.client.get.call_count == 2
 
-    def test_token_from_env_is_sent(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        monkeypatch.setenv("GH_TOKEN", "my_token")
-        fetcher = GodotFetcher(cache_dir=tmp_path)
-        assert fetcher.client.headers["Authorization"] == "Bearer my_token"
+    def test_assets_get_checksum_and_download_url(self, mock_fetcher):
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
+        release = mock_fetcher.fetch_releases(stable_only=True)[0]
+        asset = release.get_asset("windows", "x86_64")
+        assert asset.sha512 == SHA
+        assert asset.url == (
+            "https://github.com/godotengine/godot-builds/releases/download/"
+            "4.1.1-stable/Godot_v4.1.1-stable_win64.exe.zip"
+        )
 
-    def test_no_token_sends_no_auth_header(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        monkeypatch.delenv("GH_TOKEN", raising=False)
-        fetcher = GodotFetcher(cache_dir=tmp_path)
-        assert "Authorization" not in fetcher.client.headers
+    def test_override_adds_unlisted_asset_without_checksum(self, mock_fetcher, mocker):
+        name = "Godot_v4.0-rc1_win64.exe.zip"
+        mocker.patch.dict(OVERRIDES, {"4.0-rc1": {name: None}}, clear=True)
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
+
+        release = mock_fetcher.fetch_releases(stable_only=False)[1]
+
+        assert release.get_asset("windows", "x86_64").sha512 is None
+        assert release.get_asset("macos", "arm64").sha512 == SHA
+
+    def test_null_override_keeps_listed_hash_but_baked_one_replaces_it(
+        self, mock_fetcher, mocker
+    ):
+        mac, win = "Godot_v4.0-rc1_macos.universal.zip", "Godot_v4.0-rc1_win64.exe.zip"
+        baked = "b" * 128
+        mocker.patch.dict(OVERRIDES, {"4.0-rc1": {mac: None, win: baked}}, clear=True)
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
+
+        release = mock_fetcher.fetch_releases(stable_only=False)[1]
+
+        assert release.get_asset("macos", "arm64").sha512 == SHA
+        assert release.get_asset("windows", "x86_64").sha512 == baked
+
+    def test_release_without_files_list_gets_its_overrides(self, mock_fetcher, mocker):
+        name = "Godot_v3.0-stable_win64.exe.zip"
+        mocker.patch.dict(OVERRIDES, {"3.0-stable": {name: None}}, clear=True)
+        old = {"tag": "3.0-stable", "release_date": 1518992040}
+        setup_mock_response(mock_fetcher, [[old]])
+
+        (release,) = mock_fetcher.fetch_releases()
+
+        assert [a.name for a in release.assets] == [name]
+
+    def test_release_without_date_is_skipped(self, mock_fetcher, caplog):
+        undated = {"tag": "4.2-stable", "files": []}
+        setup_mock_response(mock_fetcher, [[*MOCK_RELEASES, undated]])
+
+        releases = mock_fetcher.fetch_releases(stable_only=False)
+
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
+        assert "4.2-stable" in caplog.text
+
+    def test_unreadable_and_unrelated_files_are_skipped(self, mock_fetcher):
+        response = MagicMock()
+        response.content = make_archive(
+            MOCK_RELEASES,
+            {
+                "releases/godot-4.2-stable.json": b"{not json",
+                "releases/README.md": b"hi",
+                "tools/godot-4.3-stable.json": b"{}",
+            },
+        )
+        mock_fetcher.client.get.side_effect = [response]
+
+        releases = mock_fetcher.fetch_releases(stable_only=False)
+
+        assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
     def test_context_manager_closes_client(self, tmp_path):
         with GodotFetcher(cache_dir=tmp_path) as fetcher:
@@ -329,18 +384,18 @@ class TestGodotFetcherReleaseFetching:
         first = GodotFetcher(cache_dir=tmp_path)
         assert first.fetched_at is None
         first.client = mocker.MagicMock()
-        setup_mock_response(first, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(first, [MOCK_RELEASES])
         before = datetime.now(UTC)
         first.fetch_releases()
         assert before <= first.fetched_at <= datetime.now(UTC)
 
         second = GodotFetcher(cache_dir=tmp_path)
         second.fetch_releases()
-        mtime = (tmp_path / "releases_all.json").stat().st_mtime
+        mtime = (tmp_path / "godot_builds.json").stat().st_mtime
         assert second.fetched_at == datetime.fromtimestamp(mtime, UTC)
 
     def test_filter_by_target_counts_dotnet_only_builds(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         releases = mock_fetcher.fetch_releases(
             stable_only=False, platform="linux", arch="x86_64"
         )
@@ -350,17 +405,17 @@ class TestGodotFetcherReleaseFetching:
         mocker.patch(
             "godotkit.engine.release_fetcher.detect_platform", return_value="macos"
         )
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         releases = mock_fetcher.fetch_releases(stable_only=False, arch="arm64")
         assert [r.tag for r in releases] == ["4.0-rc1"]
 
     def test_filter_with_unknown_name_raises(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         with pytest.raises(ValueError, match="Unknown platform"):
             mock_fetcher.fetch_releases(platform="win", arch="x86_64")
 
     def test_fetch_releases_with_cache_skips_http_calls(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         mock_fetcher.fetch_releases(stable_only=True)
         mock_fetcher.client.get.reset_mock()
         releases = mock_fetcher.fetch_releases(stable_only=True)
@@ -369,12 +424,12 @@ class TestGodotFetcherReleaseFetching:
         assert len(mock_fetcher.cache) == 2
 
     def test_fetch_releases_with_max_releases_limits_after_sorting(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA[::-1], []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES[::-1]])
         releases = mock_fetcher.fetch_releases(stable_only=False, max_releases=1)
         assert [r.tag for r in releases] == ["4.1.1-stable"]
 
     def test_fetch_releases_cache_ignores_previous_filters(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         assert len(mock_fetcher.fetch_releases(stable_only=False, max_releases=1)) == 1
         releases = mock_fetcher.fetch_releases(
             stable_only=False, platform="macos", arch="x86_64"
@@ -387,7 +442,7 @@ class TestGodotFetcherReleaseFetching:
         assert [r.tag for r in releases] == ["4.1.1-stable", "4.0-rc1"]
 
     def test_fetch_releases_returned_list_does_not_alias_cache(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         mock_fetcher.fetch_releases(stable_only=False).clear()
         assert len(mock_fetcher.fetch_releases(stable_only=False)) == 2
 
@@ -413,11 +468,11 @@ class TestGodotFetcherFindAsset:
         )
 
     def test_fetches_when_nothing_is_cached(self, mock_fetcher):
-        setup_mock_response(mock_fetcher, [MOCK_GH_RELEASE_DATA, []])
+        setup_mock_response(mock_fetcher, [MOCK_RELEASES])
         asset = mock_fetcher.find_asset(
             GodotVersion(4, 0, channel="rc", channel_num=1), "macos", "arm64"
         )
-        assert asset.url == "http://example.com/macos_rc.zip"
+        assert asset.name == "Godot_v4.0-rc1_macos.universal.zip"
 
     def test_missing_version_raises_release_not_found(
         self, mock_fetcher, godot_release_4_1_1
@@ -438,7 +493,12 @@ class TestGodotFetcherFindAsset:
         assert issubclass(AssetNotFoundError, GodotkitError)
 
 
-def test_release_dates_ship_with_the_package():
-    assert len(RELEASE_DATES) == 224
-    assert RELEASE_DATES["3.0-stable"] == "2018-01-29"
-    assert RELEASE_DATES["3.2.4-beta1"] == "2020-10-21"
+def test_overrides_are_well_formed():
+    bad = [
+        (tag, name, sha)
+        for tag, builds in OVERRIDES.items()
+        for name, sha in builds.items()
+        if not name.startswith(f"Godot_v{tag}_")
+        or not (sha is None or re.fullmatch(r"[0-9a-fA-F]{128}", sha))
+    ]
+    assert bad == []

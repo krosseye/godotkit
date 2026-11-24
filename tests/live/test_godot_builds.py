@@ -1,15 +1,16 @@
 """When this fails, upstream has changed something."""
 
 import json
+import os
 import re
 from pathlib import Path
 
+import httpx
 import pytest
 
-from godotkit.engine import GodotFetcher
+from godotkit.engine import GodotFetcher, GodotVersion
 from godotkit.engine.release_fetcher import (
     ASSET_SUFFIXES,
-    RELEASE_DATES,
     GodotRelease,
 )
 
@@ -29,7 +30,6 @@ NOT_EDITOR_ONE_OFFS = {
 }
 
 FIRST_SUPPORTED_MAJOR = 3
-IMPORT_DATE = "2023-09-12"
 
 
 def _suffixes(release: GodotRelease) -> set[str]:
@@ -59,6 +59,32 @@ def all_releases(fetcher: GodotFetcher) -> list[GodotRelease]:
 
 
 @pytest.fixture(scope="session")
+def github() -> dict[str, set[str]]:
+    """Asset names of every GitHub release, by tag (from the GitHub API)."""
+    headers = {}
+    if token := os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
+    url = "https://api.github.com/repos/godotengine/godot-builds/releases"
+    releases: dict[str, set[str]] = {}
+    with httpx.Client(headers=headers, timeout=30) as client:
+        for page in range(1, 100):
+            data = client.get(url, params={"per_page": 100, "page": page})
+            data.raise_for_status()
+            for r in data.json():
+                releases[r["tag_name"]] = {a["name"] for a in r["assets"]}
+            if len(data.json()) < 100:
+                break
+    return releases
+
+
+def _editor_builds(tag: str, names) -> set[str]:
+    prefix = f"Godot_v{tag}_"
+    return {
+        n for n in names if n.startswith(prefix) and n[len(prefix) :] in KNOWN_SUFFIXES
+    }
+
+
+@pytest.fixture(scope="session")
 def supported(all_releases) -> dict[int, list[GodotRelease]]:
     """Releases of each supported major version, oldest first."""
     by_major: dict[int, list[GodotRelease]] = {}
@@ -69,21 +95,49 @@ def supported(all_releases) -> dict[int, list[GodotRelease]]:
 
 
 def test_only_known_malformed_tags_are_skipped(fetcher, all_releases):
-    raw = json.loads((fetcher.cache_dir / "releases_all.json").read_text("utf-8"))
-    skipped = {r["tag_name"] for r in raw} - {r.tag for r in all_releases}
+    """Also fails when a release is skipped for having no date."""
+    raw = json.loads((fetcher.cache_dir / "godot_builds.json").read_text("utf-8"))
+    skipped = {r["tag"] for r in raw} - {r.tag for r in all_releases}
 
     assert sorted(skipped - KNOWN_MALFORMED_TAGS) == []
 
 
 def test_every_tag_round_trips(all_releases):
-    assert sorted(r.tag for r in all_releases if r.version.to_tag() != r.tag) == []
+    """Through to_tag, and through str and parse with and without C#."""
+    broken = sorted(
+        r.tag
+        for r in all_releases
+        for csharp in (False, True)
+        if (v := GodotVersion.from_tag(r.tag, csharp)).to_tag() != r.tag
+        or GodotVersion.parse(str(v)) != v
+    )
+    assert broken == []
 
 
-def test_every_imported_release_has_a_real_date(fetcher, all_releases):
-    raw = json.loads((fetcher.cache_dir / "releases_all.json").read_text("utf-8"))
-    imported = {r["tag_name"] for r in raw if r["published_at"].startswith(IMPORT_DATE)}
+def test_every_github_release_has_a_release_file(fetcher, all_releases, github):
+    raw = json.loads((fetcher.cache_dir / "godot_builds.json").read_text("utf-8"))
+    assert sorted(github.keys() - {r["tag"] for r in raw}) == []
 
-    assert sorted(imported - RELEASE_DATES.keys()) == []
+
+def test_every_github_editor_build_is_known(all_releases, github):
+    """On failure, add the build to overrides.json (SHA-512 or null)."""
+    known = {r.tag: {a.name for a in r.assets} for r in all_releases}
+    unknown = sorted(
+        (tag, name)
+        for tag, names in github.items()
+        for name in _editor_builds(tag, names) - known.get(tag, set())
+    )
+    assert unknown == []
+
+
+def test_every_known_editor_build_exists_on_github(all_releases, github):
+    missing = sorted(
+        (r.tag, name)
+        for r in all_releases
+        for name in _editor_builds(r.tag, (a.name for a in r.assets))
+        - github.get(r.tag, set())
+    )
+    assert missing == []
 
 
 def test_frozen_fixture_still_exists_upstream(all_releases):

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -107,9 +107,9 @@ EXPECTED: dict[str, dict[tuple[str, str], tuple[str | None, str | None]]] = {
 def release(tag: str) -> GodotRelease:
     return GodotRelease(
         tag,
-        datetime(2026, 1, 1),
+        date(2026, 1, 1),
         [
-            GodotAsset(n, f"https://example.com/{n}", 1, "_mono" in n)
+            GodotAsset(n, f"https://example.com/{n}", csharp_enabled="_mono" in n)
             for n in ASSETS[tag]
         ],
     )

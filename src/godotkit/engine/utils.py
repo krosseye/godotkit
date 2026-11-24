@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import platform
@@ -11,7 +12,12 @@ import httpx
 
 from godotkit._common import launch_daemon_command
 from godotkit.constants import RELEASE_DOWNLOAD_TIMEOUT, USER_AGENT
-from godotkit.exceptions import DownloadCancelled, DownloadError, ExtractError
+from godotkit.exceptions import (
+    ChecksumError,
+    DownloadCancelled,
+    DownloadError,
+    ExtractError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,41 @@ def _swap_in(staged: Path, target: Path, backup: Path) -> None:
         if backup.exists():
             backup.rename(target)
         raise
+
+
+def _check_sha512(url: str, digest: str, expected: str, timeout: float) -> None:
+    """Raises ChecksumError unless `digest` matches `expected` or SHA512-SUMS.txt"""
+    # note: 3.2.2-beta2 to 4.2-dev4 have no SUMS, so a stale hash rejects a good build
+    if digest == expected.lower():
+        return
+    base, name = url.rsplit("/", 1)
+    sums_url = f"{base}/SHA512-SUMS.txt"
+    try:
+        response = httpx.get(
+            sums_url,
+            headers={"User-Agent": USER_AGENT},
+            follow_redirects=True,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        raise ChecksumError(
+            f"{name} doesn't match its published SHA-512, and {sums_url} "
+            f"couldn't be read to double-check: {e}"
+        ) from e
+    for line in response.text.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].lstrip("*") == name:
+            if parts[0].lower() == digest:
+                logger.info(
+                    "%s matches %s (the expected hash is stale).", name, sums_url
+                )
+                return
+            break
+    raise ChecksumError(
+        f"{name} doesn't match its published SHA-512 (expected {expected}, "
+        f"got {digest}), and {sums_url} doesn't confirm it either."
+    )
 
 
 def find_binary(dir_path: Path) -> Path | None:
@@ -130,6 +171,7 @@ def download_and_extract(
     overwrite: bool = False,
     progress_callback: Callable[[str, int, int | None], None] | None = None,
     cancel: Callable[[], bool] | None = None,
+    sha512: str | None = None,
 ) -> None:
     """
     Downloads a zip file from the given URL and extracts its contents.
@@ -147,10 +189,13 @@ def download_and_extract(
             Exceptions it raises propagate unchanged.
         cancel: Checked before each downloaded chunk; return True to stop.
             Extraction can't be cancelled.
+        sha512: Expected hex SHA-512 of the zip (`GodotAsset.sha512`). On a
+            mismatch, the `SHA512-SUMS.txt` next to `url` decides. None skips it.
 
     Raises:
         FileExistsError: If `save_path` isn't empty and `overwrite` is False.
         DownloadCancelled: If `cancel` returned True.
+        ChecksumError: If the zip doesn't match `sha512` or SHA512-SUMS.txt.
         DownloadError: On network or write failure.
         ExtractError: On an invalid or empty zip, or a failed extraction.
     """
@@ -182,6 +227,7 @@ def download_and_extract(
 
                 total_bytes = int(response.headers.get("Content-Length", 0)) or None
                 downloaded = 0
+                digest = hashlib.sha512()
 
                 try:
                     f = temp_zip.open("wb")
@@ -197,12 +243,16 @@ def download_and_extract(
                             raise DownloadError(
                                 f"Failed to write to {temp_zip}: {e}"
                             ) from e
+                        digest.update(chunk)
                         downloaded += len(chunk)
                         if progress_callback:
                             progress_callback("download", downloaded, total_bytes)
 
         except httpx.RequestError as e:
             raise DownloadError(f"Network error during download from {url}: {e}") from e
+
+        if sha512 is not None:
+            _check_sha512(url, digest.hexdigest(), sha512, timeout)
 
         # Extract phase
         if not zipfile.is_zipfile(temp_zip):

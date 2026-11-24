@@ -10,6 +10,7 @@ on:
       - develop
     paths:
       - "src/godotkit/engine/release_fetcher.py"
+      - "src/godotkit/engine/overrides.json"
       - "src/godotkit/engine/version_parsing.py"
       - "tests/live/**"
       - "tests/engine/data/**"
@@ -17,6 +18,7 @@ on:
   pull_request:
     paths:
       - "src/godotkit/engine/release_fetcher.py"
+      - "src/godotkit/engine/overrides.json"
       - "src/godotkit/engine/version_parsing.py"
       - "tests/live/**"
       - "tests/engine/data/**"

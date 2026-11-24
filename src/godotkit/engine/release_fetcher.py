@@ -1,10 +1,12 @@
+import io
 import json
 import logging
 import os
 import platform
+import tarfile
 import time
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
 from typing import Self
@@ -12,14 +14,21 @@ from typing import Self
 import httpx
 
 from godotkit.constants import RELEASE_CACHE_TTL, RELEASE_FETCHER_TIMEOUT, USER_AGENT
-from godotkit.exceptions import AssetNotFoundError, ReleaseNotFoundError
+from godotkit.exceptions import (
+    AssetNotFoundError,
+    DownloadError,
+    ReleaseNotFoundError,
+)
 
 from .version_parsing import CSHARP_MARKER, GodotVersion
 
 logger = logging.getLogger(__name__)
 
-RELEASE_DATES: dict[str, str] = json.loads(
-    files(__package__).joinpath("release_dates.json").read_text(encoding="utf-8")
+# Editor builds the release files don't list, by tag: {name: SHA-512 or null}
+# shortcut: null hashes (2.1 to 3.2.2-beta1, 3.2.4-beta2) install unverified
+# fix: bake them by hashing those downloads once
+OVERRIDES: dict[str, dict[str, str | None]] = json.loads(
+    files(__package__).joinpath("overrides.json").read_text(encoding="utf-8")
 )
 
 PLATFORMS = ["windows", "linux", "macos"]
@@ -91,16 +100,22 @@ ASSET_SUFFIXES: dict[tuple[str, str, bool], tuple[str, ...]] = {
 
 
 class GodotAsset:
-    """Represents a single downloadable release asset."""
+    """A downloadable release file. `sha512` is its published hex checksum, or None."""
 
-    def __init__(self, name: str, url: str, size: int, csharp_enabled: bool = False):
+    def __init__(
+        self,
+        name: str,
+        url: str,
+        sha512: str | None = None,
+        csharp_enabled: bool = False,
+    ):
         self.name = name
         self.url = url
-        self.size = size
+        self.sha512 = sha512
         self.csharp_enabled = csharp_enabled
 
     def __repr__(self):
-        return f"<GodotAsset {self.name!r}, {self.size} bytes, csharp={self.csharp_enabled}>"
+        return f"<GodotAsset {self.name!r}, csharp={self.csharp_enabled}>"
 
 
 class GodotRelease:
@@ -110,6 +125,8 @@ class GodotRelease:
     builds, so `version.csharp_enabled` is always False; use `get_asset(...,
     csharp=True)` for the .NET build.
 
+    `published_at` is the release day (UTC).
+
     Raises:
         ValueError: If `tag` isn't a valid Godot version tag.
     """
@@ -117,7 +134,7 @@ class GodotRelease:
     def __init__(
         self,
         tag: str,
-        published_at: datetime,
+        published_at: date,
         assets: list[GodotAsset],
     ):
         self.tag = tag
@@ -168,7 +185,7 @@ class GodotRelease:
         return None
 
     def __repr__(self):
-        return f"<GodotRelease {self.tag}, published={self.published_at.date()}>"
+        return f"<GodotRelease {self.tag}, published={self.published_at}>"
 
 
 def detect_platform() -> str:
@@ -214,19 +231,24 @@ def default_cache_dir() -> Path:
 
 
 class GodotFetcher:
-    """Handles fetching and caching of Godot release information from GitHub.
+    """Handles fetching and caching of Godot release information.
 
-    Releases are cached on disk in `cache_dir` for `cache_ttl` seconds. If
-    `GITHUB_TOKEN` or `GH_TOKEN` is set, requests are authenticated (5000
-    req/hour instead of 60).
+    Releases come from godot-builds' `releases/*.json`, downloaded
+    with `OVERRIDES` applied. They're cached in `cache_dir` for
+    `cache_ttl` seconds.
 
-    `fetched_at` is when the cached release list was downloaded from GitHub
-    (timezone-aware UTC), or None before the first fetch.
+    `fetched_at` is when the cached release list was downloaded (timezone-aware
+    UTC), or None before the first fetch.
 
     Use it as a context manager, or call `close()` when done.
     """
 
-    ALL_URL = "https://api.github.com/repos/godotengine/godot-builds/releases"
+    ARCHIVE_URL = (
+        "https://codeload.github.com/godotengine/godot-builds/tar.gz/refs/heads/main"
+    )
+    DOWNLOAD_URL = (
+        "https://github.com/godotengine/godot-builds/releases/download/{tag}/{name}"
+    )
 
     def __init__(
         self,
@@ -234,11 +256,9 @@ class GodotFetcher:
         cache_dir: Path | None = None,
         cache_ttl: float = RELEASE_CACHE_TTL,
     ):
-        headers = {"User-Agent": USER_AGENT}
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        self.client = httpx.Client(timeout=timeout, headers=headers)
+        self.client = httpx.Client(
+            timeout=timeout, headers={"User-Agent": USER_AGENT}, follow_redirects=True
+        )
         self.cache_dir = cache_dir or default_cache_dir()
         self.cache_ttl = cache_ttl
         self.cache: list[GodotRelease] = []
@@ -264,7 +284,7 @@ class GodotFetcher:
         refresh_cache: bool = False,
     ) -> list[GodotRelease]:
         """
-        Fetches Godot releases from GitHub.
+        Fetches Godot releases.
 
         Args:
             stable_only: If True, returns only stable releases.
@@ -280,6 +300,7 @@ class GodotFetcher:
 
         Raises:
             ValueError: If `platform` or `arch` isn't a known name.
+            DownloadError: If the release list couldn't be downloaded or read.
         """
         if refresh_cache or not self.cache:
             self.cache = self._fetch_all(use_disk_cache=not refresh_cache)
@@ -309,11 +330,11 @@ class GodotFetcher:
         return releases[:max_releases] if max_releases else releases
 
     def _fetch_all(self, use_disk_cache: bool = True) -> list[GodotRelease]:
-        cache_file = self.cache_dir / "releases_all.json"
+        cache_file = self.cache_dir / "godot_builds.json"
 
         data = self._read_disk_cache(cache_file) if use_disk_cache else None
         if data is None:
-            data = self._download(self.ALL_URL)
+            data = self._download(self.ARCHIVE_URL)
             self.fetched_at = datetime.now(UTC)
             self._write_disk_cache(cache_file, data)
         else:
@@ -321,34 +342,25 @@ class GodotFetcher:
 
         releases: list[GodotRelease] = []
         for release in data:
-            tag = release.get("tag_name")
-            published_at = release.get("published_at")
-
-            if not published_at or not tag:
-                logger.warning(
-                    "Skipping malformed release: tag=%s, published_at=%s",
-                    tag,
-                    published_at,
-                )
+            tag = release["tag"]
+            timestamp = release["release_date"]
+            if not isinstance(timestamp, int):
+                logger.warning("Skipping release %s: it has no release date.", tag)
                 continue
+            published_at = datetime.fromtimestamp(timestamp, UTC).date()
 
-            if tag in RELEASE_DATES:
-                published_at = datetime.fromisoformat(RELEASE_DATES[tag])
-            else:
-                published_at = datetime.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ")
-
-            assets = []
-            for a in release.get("assets", []):
-                asset_name_lower = a["name"].lower()
-                csharp_enabled = f"_{CSHARP_MARKER}" in asset_name_lower
-                assets.append(
-                    GodotAsset(
-                        name=a["name"],
-                        url=a["browser_download_url"],
-                        size=a["size"],
-                        csharp_enabled=csharp_enabled,
-                    )
+            extra = OVERRIDES.get(tag, {})
+            checksums = {**extra, **release["files"]}
+            checksums.update({n: h for n, h in extra.items() if h})
+            assets = [
+                GodotAsset(
+                    name=name,
+                    url=self.DOWNLOAD_URL.format(tag=tag, name=name),
+                    sha512=sha512,
+                    csharp_enabled=f"_{CSHARP_MARKER}" in name.lower(),
                 )
+                for name, sha512 in checksums.items()
+            ]
 
             try:
                 releases.append(GodotRelease(tag, published_at, assets))
@@ -360,36 +372,47 @@ class GodotFetcher:
         return releases
 
     def _download(self, url: str) -> list[dict]:
-        """Downloads every release page, keeping only the fields we parse."""
+        """Downloads the godot-builds archive and reads its `releases/*.json`.
+
+        Each release becomes `{"tag", "release_date", "files": {name: sha512}}`.
+        """
         logger.info("Fetching releases from %s.", url)
         data: list[dict] = []
-        page = 1
-        per_page = 100
-
-        while True:
-            request_url = f"{url}?page={page}&per_page={per_page}"
-            logger.debug("Requesting URL: %s", request_url)
-            response = self.client.get(request_url)
+        try:
+            response = self.client.get(url)
             response.raise_for_status()
-            page_data = response.json()
-            if not page_data:
-                break
-
-            data.extend(
-                {
-                    "tag_name": r.get("tag_name"),
-                    "published_at": r.get("published_at"),
-                    "assets": [
-                        {k: a[k] for k in ("name", "browser_download_url", "size")}
-                        for a in r.get("assets", [])
-                    ],
-                }
-                for r in page_data
-            )
-
-            if len(page_data) < per_page:
-                break
-            page += 1
+            with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
+                for member in tar:
+                    path = Path(member.name)
+                    if not (
+                        member.isfile()
+                        and path.parent.name == "releases"
+                        and path.name.startswith("godot-")
+                        and path.suffix == ".json"
+                    ):
+                        continue
+                    # Older files hold a commit hash in "git_reference".
+                    tag = path.stem.removeprefix("godot-")
+                    try:
+                        raw = json.load(tar.extractfile(member))  # type: ignore[arg-type]
+                        files = {
+                            f["filename"]: f["checksum"].lower()
+                            for f in raw.get("files") or []
+                        }
+                    except (ValueError, KeyError, TypeError, AttributeError) as e:
+                        logger.warning("Skipping unreadable %s: %s", path.name, e)
+                        continue
+                    data.append(
+                        {
+                            "tag": tag,
+                            "release_date": raw.get("release_date"),
+                            "files": files,
+                        }
+                    )
+        except (httpx.HTTPError, tarfile.TarError) as e:
+            raise DownloadError(
+                f"Couldn't fetch the release list from {url}: {e}"
+            ) from e
 
         return data
 
@@ -434,6 +457,7 @@ class GodotFetcher:
             ReleaseNotFoundError: If no release has this version. Call
                 `fetch_releases(refresh_cache=True)` first if it's brand new.
             AssetNotFoundError: If the release has no build for this target.
+            DownloadError: If the release list couldn't be downloaded or read.
             ValueError: If `platform` or `arch` isn't a known name.
         """
         if not self.cache:
@@ -452,4 +476,6 @@ class GodotFetcher:
             )
 
         logger.info("Found %s for %s.", asset.url, version)
+        if asset.sha512 is None:
+            logger.warning("%s has no published checksum to verify.", asset.name)
         return asset

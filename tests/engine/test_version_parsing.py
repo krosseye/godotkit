@@ -2,7 +2,6 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from godotkit.engine.release_fetcher import RELEASE_DATES
 from godotkit.engine.version_parsing import (
     CHANNEL_STABLE,
     VARIANT_DOTNET,
@@ -224,12 +223,6 @@ class TestStringAndProperties:
     def test_parse_accepts_lenient_csharp_spellings(self, text):
         assert GodotVersion.parse(text) == GodotVersion(4, 3, csharp_enabled=True)
 
-    @pytest.mark.parametrize("csharp", [False, True])
-    def test_every_release_round_trips_through_str(self, csharp):
-        tags = set(RELEASE_DATES) - {"2.0.4.1-stable", "3.2-alpha0-unofficial"}
-        versions = [GodotVersion.from_tag(t, csharp) for t in tags]
-        assert [v for v in versions if GodotVersion.parse(str(v)) != v] == []
-
     def test_is_property_flags_expected_truth_values(self):
         v_stable = GodotVersion.parse("4.5")
         v_mono = GodotVersion.parse("3.6.2 (Mono)")
@@ -284,9 +277,24 @@ class TestToTag:
     def test_to_tag(self, version, tag):
         assert version.to_tag() == tag
 
-    def test_round_trips_every_imported_release_tag(self):
-        tags = set(RELEASE_DATES) - {"2.0.4.1-stable", "3.2-alpha0-unofficial"}
-        assert [t for t in tags if GodotVersion.from_tag(t).to_tag() != t] == []
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            "1.0-stable",
+            "3.1.2-stable",
+            "4.8-dev7",
+            "4.0-alpha17",
+            "4.0-beta10",
+            "4.4-rc2",
+            "3.2.4-beta2",
+            "3.2.4-rc1",
+        ],
+    )
+    @pytest.mark.parametrize("csharp", [False, True])
+    def test_release_tag_round_trips(self, tag, csharp):
+        version = GodotVersion.from_tag(tag, csharp)
+        assert version.to_tag() == tag
+        assert GodotVersion.parse(str(version)) == version
 
     def test_round_trip_keeps_csharp_flag(self):
         version = GodotVersion(4, 4, 0, "dev", 7, csharp_enabled=True)

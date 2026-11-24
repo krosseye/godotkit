@@ -6,6 +6,10 @@ class DownloadError(GodotkitError):
     """A release download failed."""
 
 
+class ChecksumError(DownloadError):
+    """A download doesn't match its published SHA-512 checksum."""
+
+
 class DownloadCancelled(GodotkitError):
     """A download was stopped by its `cancel` callback."""
 

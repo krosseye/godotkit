@@ -1,12 +1,14 @@
+import hashlib
 import os
 import stat
 import zipfile
 from contextlib import nullcontext
 from pathlib import Path
 
+import httpx
 import pytest
 
-from godotkit.engine import DownloadCancelled, ExtractError
+from godotkit.engine import ChecksumError, DownloadCancelled, ExtractError
 from godotkit.engine.utils import _swap_in, download_and_extract, find_binary
 
 ELF = b"\x7fELF" + b"\0" * 12
@@ -181,6 +183,81 @@ class TestDownloadAndExtract:
             download_and_extract(DOWNLOAD_URL, tmp_path / "install")
 
         assert not (tmp_path / "install").exists()
+
+
+class TestChecksum:
+    """DOWNLOAD_URL ends in godot.zip, so SUMS lines name "godot.zip"."""
+
+    @pytest.fixture
+    def payload(self, tmp_path: Path, serve) -> bytes:
+        data = make_zip(tmp_path / "src.zip", {"Godot.exe": (b"new", 0)})
+        serve(data)
+        return data
+
+    @pytest.fixture
+    def sums(self, mocker):
+        def _sums(text: str | None = None, error: Exception | None = None):
+            response = mocker.MagicMock(text=text)
+            if error:
+                response.raise_for_status.side_effect = error
+            return mocker.patch(
+                "godotkit.engine.utils.httpx.get", return_value=response
+            )
+
+        return _sums
+
+    def test_matching_hash_installs_without_fetching_sums(
+        self, tmp_path: Path, payload, sums
+    ):
+        get = sums()
+        install = tmp_path / "install"
+
+        download_and_extract(
+            DOWNLOAD_URL, install, sha512=hashlib.sha512(payload).hexdigest().upper()
+        )
+
+        assert (install / "Godot.exe").read_text() == "new"
+        get.assert_not_called()
+
+    def test_stale_hash_confirmed_by_sums_installs(self, tmp_path: Path, payload, sums):
+        digest = hashlib.sha512(payload).hexdigest()
+        get = sums(f"{'0' * 128}  other.zip\n{digest} *godot.zip\n")
+
+        download_and_extract(DOWNLOAD_URL, tmp_path / "install", sha512="ff" * 64)
+
+        assert (tmp_path / "install" / "Godot.exe").exists()
+        assert get.call_args.args[0] == (
+            "https://godotengine.org/download/SHA512-SUMS.txt"
+        )
+
+    def test_mismatch_sums_disagrees_raises_and_installs_nothing(
+        self, tmp_path: Path, payload, sums
+    ):
+        sums(f"{'ee' * 64}  godot.zip\n{hashlib.sha512(payload).hexdigest()}  x.zip")
+        install = tmp_path / "install"
+        install.mkdir()
+        (install / "Godot.exe").write_text("old")
+
+        with pytest.raises(ChecksumError, match="doesn't confirm"):
+            download_and_extract(
+                DOWNLOAD_URL, install, overwrite=True, sha512="ff" * 64
+            )
+
+        assert (install / "Godot.exe").read_text() == "old"
+
+    def test_mismatch_without_readable_sums_raises(self, tmp_path: Path, payload, sums):
+        sums(error=httpx.HTTPStatusError("404", request=None, response=None))
+
+        with pytest.raises(ChecksumError, match="couldn't be read"):
+            download_and_extract(DOWNLOAD_URL, tmp_path / "install", sha512="ff" * 64)
+
+        assert not (tmp_path / "install").exists()
+
+    def test_empty_hash_is_checked_not_skipped(self, tmp_path: Path, payload, sums):
+        sums("")
+
+        with pytest.raises(ChecksumError):
+            download_and_extract(DOWNLOAD_URL, tmp_path / "install", sha512="")
 
 
 def test_swap_in_restores_target_when_rename_fails(tmp_path: Path):
