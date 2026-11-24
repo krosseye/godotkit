@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.12.0 (2026-11-24)
+
+### Features
+
+- Read releases from godot-builds files and verify downloads
+  ([`2587ccf`](https://github.com/krosseye/godotkit/commit/2587ccf1de47c9d26b33490d284a393df621c9c9))
+
+
 ## v0.11.0 (2026-11-22)
 
 ### Features
